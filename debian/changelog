@@ -1,0 +1,81 @@
+sndio (1.5.0-3) unstable; urgency=medium
+
+  * Set SONAME properly on !linux, from Samuel Thibault (Closes: 912453)
+  * Standards-Version updated to 4.2.1 (no change).
+
+ -- Peter Piwowarski <peterjpiwowarski@gmail.com>  Thu, 01 Nov 2018 00:28:43 -0400
+
+sndio (1.5.0-2) unstable; urgency=medium
+
+  * Upload to unstable.
+
+ -- Peter Piwowarski <peterjpiwowarski@gmail.com>  Thu, 09 Aug 2018 07:30:58 -0400
+
+sndio (1.5.0-1) experimental; urgency=medium
+
+  * New upstream release.
+  * Disable OSS support on hurd.
+  * Standards-Version updated to 4.2.0 (no change).
+
+ -- Peter Piwowarski <peterjpiwowarski@gmail.com>  Wed, 08 Aug 2018 10:14:53 -0400
+
+sndio (1.4.0-1) experimental; urgency=medium
+
+  * New upstream release (Closes: #886614):
+    - OSS support added to libsndio, used on !linux
+    - sndiod now ships a systemd service file
+  * watchfile updated to match changes in the sndio website
+  * Update copyright file
+  * Standards-Version updated to 4.1.3:
+    - debian/copyright now uses the https:// variant of the Copyright-Format URL
+
+ -- Peter Piwowarski <peterjpiwowarski@gmail.com>  Tue, 23 Jan 2018 23:01:15 -0500
+
+sndio (1.1.0-3) unstable; urgency=medium
+
+  * From Helmut Grohne: "Fix FTCBFS: Pass cross compiler to configure."
+    Thanks! (Closes: #843055)
+  * sndiod depends on lsb-base (lintian)
+
+ -- Peter Piwowarski <peterjpiwowarski@gmail.com>  Thu, 24 Nov 2016 12:16:20 -0400
+
+sndio (1.1.0-2) unstable; urgency=medium
+
+  * Upload to unstable
+  * Fix the build on !linux
+
+ -- Peter Piwowarski <peterjpiwowarski@gmail.com>  Sun, 06 Mar 2016 22:32:34 -0500
+
+sndio (1.1.0-1) experimental; urgency=medium
+
+  * New upstream release. Most patches merged.
+  * libsndio6.1 no longer self-conflicts as the potential for file clashes from
+    roaraudio is gone (Closes: #816015)
+  * Standards-Version updated to 3.9.7
+
+ -- Peter Piwowarski <peterjpiwowarski@gmail.com>  Thu, 03 Mar 2016 00:21:19 -0500
+
+sndio (1.0.1-2) unstable; urgency=medium
+
+  * sndiod should have /usr/sbin/nologin as its shell (Closes: #802881)
+
+ -- Peter Piwowarski <peterjpiwowarski@gmail.com>  Mon, 26 Oct 2015 18:13:49 -0400
+
+sndio (1.0.1-1) unstable; urgency=medium
+
+  * New upstream release, removing an experimental API never used outside the
+    sndio tree, and demo tools for it (specifically, sndioctl in the sndiod
+    package and the sndio-xtools package have gone).
+  * Minor dependency tweaks (sndiod properly recommends sndio-tools, libsndio6.0
+    self-conflicts, libsndio-dev breaks/replaces old libroar-dev)
+    (Closes: #798353)
+  * Fix the build on !linux, though they still don't have local audio I/O
+  * fix debian/copyright format to be fully DEP5-compliant (no licensing change)
+
+ -- Peter Piwowarski <peterjpiwowarski@gmail.com>  Tue, 08 Sep 2015 09:29:00 -0400
+
+sndio (0.0.10-1) unstable; urgency=low
+
+  * Initial release (Closes: #795209)
+
+ -- Peter Piwowarski <peterjpiwowarski@gmail.com>  Tue, 11 Aug 2015 17:05:30 -0400

@@ -1,0 +1,2 @@
+usr/lib/*/libsndio.so
+usr/include/sndio.h

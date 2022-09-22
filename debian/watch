@@ -1,0 +1,3 @@
+# watch control file for uscan
+version=3
+http://www.sndio.org/index.html sndio-(.+)\.tar\.gz debian uupdate

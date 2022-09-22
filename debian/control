@@ -1,0 +1,73 @@
+Source: sndio
+Section: sound
+Priority: optional
+Maintainer: Peter Piwowarski <peterjpiwowarski@gmail.com>
+Build-Depends: debhelper (>= 11), libasound2-dev [linux-any], oss4-dev [kfreebsd-any], libbsd-dev
+Standards-Version: 4.2.1
+Homepage: http://www.sndio.org/
+
+Package: libsndio7.0
+Section: libs
+Architecture: any
+Multi-Arch: same
+Pre-Depends: ${misc:Pre-Depends}
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Suggests: sndiod
+Description: Small audio and MIDI framework from OpenBSD, runtime libraries
+ Sndio is a small, simple audio and MIDI framework, developed by the OpenBSD
+ project. It provides a lightweight audio and MIDI server and a well-documented
+ userspace API to access the server or audio hardware in a uniform way. Sndio is
+ designed to work well for both desktop and professional music applications, and
+ supports features found in more complex sound systems such as per-application
+ volume control, software mixing, and network transparency.
+ .
+ This package contains the sndio userspace libraries.
+
+Package: libsndio-dev
+Section: libdevel
+Architecture: any
+Multi-Arch: same
+Depends: ${shlibs:Depends}, ${misc:Depends}, libsndio7.0 (= ${binary:Version})
+Breaks: libroar-dev (<= 1.0~beta11-4)
+Replaces: libroar-dev (<= 1.0~beta11-4)
+Description: Small audio and MIDI framework from OpenBSD, development files
+ Sndio is a small, simple audio and MIDI framework, developed by the OpenBSD
+ project. It provides a lightweight audio and MIDI server and a well-documented
+ userspace API to access the server or audio hardware in a uniform way. Sndio is
+ designed to work well for both desktop and professional music applications, and
+ supports features found in more complex sound systems such as per-application
+ volume control, software mixing, and network transparency.
+ .
+ This package contains development files and documentation for the sndio
+ userspace libraries.
+
+Package: sndio-tools
+Architecture: any
+Multi-Arch: foreign
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Recommends: sndiod
+Description: Small audio and MIDI framework from OpenBSD, basic tools
+ Sndio is a small, simple audio and MIDI framework, developed by the OpenBSD
+ project. It provides a lightweight audio and MIDI server and a well-documented
+ userspace API to access the server or audio hardware in a uniform way. Sndio is
+ designed to work well for both desktop and professional music applications, and
+ supports features found in more complex sound systems such as per-application
+ volume control, software mixing, and network transparency.
+ .
+ This package contains command-line tools useful in conjunction with a local or
+ remote sndio server.
+
+Package: sndiod
+Architecture: any
+Multi-Arch: foreign
+Depends: lsb-base, ${shlibs:Depends}, ${misc:Depends}
+Recommends: sndio-tools
+Description: Small audio and MIDI framework from OpenBSD, sound server
+ Sndio is a small, simple audio and MIDI framework, developed by the OpenBSD
+ project. It provides a lightweight audio and MIDI server and a well-documented
+ userspace API to access the server or audio hardware in a uniform way. Sndio is
+ designed to work well for both desktop and professional music applications, and
+ supports features found in more complex sound systems such as per-application
+ volume control, software mixing, and network transparency.
+ .
+ This package contains the sndiod sound server.

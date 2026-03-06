@@ -235,6 +235,7 @@ file_new(struct fileops *ops, void *arg, char *name, unsigned int nfds)
 	}
 	f = xmalloc(sizeof(struct file));
 	f->max_nfds = nfds;
+	f->nfds = 0;
 	f->ops = ops;
 	f->arg = arg;
 	f->name = name;
@@ -395,7 +396,7 @@ file_poll(void)
 		timo = -1;
 	log_flush();
 	res = poll(pfds, nfds, timo);
-	if (res < 0) {
+	if (res == -1) {
 		if (errno != EINTR) {
 			log_puts("poll failed");
 			panic();
@@ -441,7 +442,7 @@ filelist_init(void)
 {
 	sigset_t set;
 
-	if (clock_gettime(CLOCK_UPTIME, &file_ts) < 0) {
+	if (clock_gettime(CLOCK_UPTIME, &file_ts) == -1) {
 		log_puts("filelist_init: CLOCK_UPTIME unsupported\n");
 		panic();
 	}

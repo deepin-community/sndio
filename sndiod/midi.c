@@ -33,6 +33,7 @@ void port_imsg(void *, unsigned char *, int);
 void port_omsg(void *, unsigned char *, int);
 void port_fill(void *, int);
 void port_exit(void *);
+void port_exitall(struct port *);
 
 struct midiops port_midiops = {
 	port_imsg,
@@ -54,8 +55,8 @@ struct midithru {
 /*
  * length of voice and common messages (status byte included)
  */
-unsigned int voice_len[] = { 3, 3, 3, 3, 2, 2, 3 };
-unsigned int common_len[] = { 0, 2, 3, 2, 0, 0, 1, 1 };
+const unsigned int voice_len[] = { 3, 3, 3, 3, 2, 2, 3 };
+const unsigned int common_len[] = { 0, 2, 3, 2, 0, 0, 1, 1 };
 
 void
 midi_log(struct midi *ep)
@@ -92,6 +93,7 @@ midi_new(struct midiops *ops, void *arg, int mode)
 	ep->len = 0;
 	ep->idx = 0;
 	ep->st = 0;
+	ep->last_st = 0;
 	ep->txmask = 0;
 	ep->self = 1 << i;
 	ep->tickets = 0;
@@ -189,6 +191,25 @@ midi_tag(struct midi *ep, unsigned int tag)
 }
 
 /*
+ * return the list of tags
+ */
+unsigned int
+midi_tags(struct midi *ep)
+{
+	int i;
+	struct midithru *t;
+	unsigned int tags;
+
+	tags = 0;
+	for (i = 0; i < MIDITHRU_NMAX; i++) {
+		t = midithru + i;
+		if ((t->txmask | t->rxmask) & ep->self)
+			tags |= 1 << i;
+	}
+	return tags;
+}
+
+/*
  * broadcast the given message to other endpoints
  */
 void
@@ -238,6 +259,16 @@ midi_tickets(struct midi *iep)
 {
 	int i, tickets, avail, maxavail;
 	struct midi *oep;
+
+	/*
+	 * don't request iep->ops->fill() too often as it generates
+	 * useless network traffic: wait until we reach half of the
+	 * max tickets count. As in the worst case (see comment below)
+	 * one ticket may consume two bytes, the max ticket count is
+	 * BUFSZ / 2 and halt of it is simply BUFSZ / 4.
+	 */
+	if (iep->tickets >= MIDI_BUFSZ / 4)
+		return;
 
 	maxavail = MIDI_BUFSZ;
 	for (i = 0; i < MIDI_NEP ; i++) {
@@ -295,7 +326,18 @@ midi_in(struct midi *iep, unsigned char *idata, int icount)
 				iep->msg[iep->idx++] = c;
 				iep->ops->imsg(iep->arg, iep->msg, iep->idx);
 			}
-			iep->st = 0;
+
+			/*
+			 * There are bogus MIDI sources that keep
+			 * state across sysex; Linux virmidi ports fed
+			 * by the sequencer is an example. We
+			 * workaround this by saving the current
+			 * status and restoring it at the end of the
+			 * sysex.
+			 */
+			iep->st = iep->last_st;
+			if (iep->st)
+				iep->len = voice_len[(iep->st >> 4) & 7];
 			iep->idx = 0;
 		} else if (c >= 0xf0) {
 			iep->msg[0] = c;
@@ -305,7 +347,7 @@ midi_in(struct midi *iep, unsigned char *idata, int icount)
 		} else if (c >= 0x80) {
 			iep->msg[0] = c;
 			iep->len = voice_len[(c >> 4) & 7];
-			iep->st = c;
+			iep->last_st = iep->st = c;
 			iep->idx = 1;
 		} else if (iep->st) {
 			if (iep->idx == 0 && iep->st != SYSEX_START)
@@ -376,6 +418,61 @@ midi_out(struct midi *oep, unsigned char *idata, int icount)
 	}
 }
 
+/*
+ * disconnect clients attached to this end-point
+ */
+void
+midi_abort(struct midi *p)
+{
+	int i;
+	struct midi *ep;
+
+	for (i = 0; i < MIDI_NEP; i++) {
+		ep = midi_ep + i;
+		if ((ep->txmask & p->self) || (p->txmask & ep->self))
+			ep->ops->exit(ep->arg);
+	}
+}
+
+/*
+ * connect to "nep" all endpoints currently connected to "oep"
+ */
+void
+midi_migrate(struct midi *oep, struct midi *nep)
+{
+	struct midithru *t;
+	struct midi *ep;
+	int i;
+
+	for (i = 0; i < MIDITHRU_NMAX; i++) {
+		t = midithru + i;
+		if (t->txmask & oep->self) {
+			t->txmask &= ~oep->self;
+			t->txmask |= nep->self;
+		}
+		if (t->rxmask & oep->self) {
+			t->rxmask &= ~oep->self;
+			t->rxmask |= nep->self;
+		}
+	}
+
+	for (i = 0; i < MIDI_NEP; i++) {
+		ep = midi_ep + i;
+		if (ep->txmask & oep->self) {
+			ep->txmask &= ~oep->self;
+			ep->txmask |= nep->self;
+		}
+	}
+
+	for (i = 0; i < MIDI_NEP; i++) {
+		ep = midi_ep + i;
+		if (oep->txmask & ep->self) {
+			oep->txmask &= ~ep->self;
+			nep->txmask |= ep->self;
+		}
+	}
+}
+
 void
 port_log(struct port *p)
 {
@@ -428,11 +525,12 @@ port_new(char *path, unsigned int mode, int hold)
 	struct port *c;
 
 	c = xmalloc(sizeof(struct port));
-	c->path = xstrdup(path);
+	c->path = path;
 	c->state = PORT_CFG;
 	c->hold = hold;
 	c->midi = midi_new(&port_midiops, c, mode);
 	c->num = midi_portnum++;
+	c->alt_next = c;
 	c->next = port_list;
 	port_list = c;
 	return c;
@@ -458,7 +556,6 @@ port_del(struct port *c)
 #endif
 	}
 	*p = c->next;
-	xfree(c->path);
 	xfree(c);
 }
 
@@ -495,6 +592,67 @@ port_unref(struct port *c)
 }
 
 struct port *
+port_alt_ref(int num)
+{
+	struct port *a, *p;
+
+	a = port_bynum(num);
+	if (a == NULL)
+		return NULL;
+
+	/* circulate to first alt port */
+	while (a->alt_next->num > a->num)
+		a = a->alt_next;
+
+	p = a;
+	while (1) {
+		if (port_ref(p))
+			break;
+		p = p->alt_next;
+		if (p == a)
+			return NULL;
+	}
+
+	return p;
+}
+
+struct port *
+port_migrate(struct port *op)
+{
+	struct port *np;
+
+	/* not opened */
+	if (op->state == PORT_CFG)
+		return op;
+
+	np = op;
+	while (1) {
+		/* try next one, circulating through the list */
+		np = np->alt_next;
+		if (np == op) {
+			if (log_level >= 2) {
+				port_log(op);
+				log_puts(": no fall-back port found\n");
+			}
+			return op;
+		}
+
+		if (port_ref(np))
+			break;
+	}
+
+	if (log_level >= 2) {
+		port_log(op);
+		log_puts(": switching to ");
+		port_log(np);
+		log_puts("\n");
+	}
+
+	midi_migrate(op->midi, np->midi);
+	return np;
+}
+
+struct port *
 port_bynum(int num)
 {
 	struct port *p;
@@ -511,7 +669,7 @@ port_open(struct port *c)
 {
 	if (!port_mio_open(c)) {
 		if (log_level >= 1) {
-			log_puts(c->path);
+			port_log(c);
 			log_puts(": failed to open midi port\n");
 		}
 		return 0;
@@ -523,8 +681,6 @@ port_open(struct port *c)
 int
 port_close(struct port *c)
 {
-	int i;
-	struct midi *ep;
 #ifdef DEBUG
 	if (c->state == PORT_CFG) {
 		port_log(c);
@@ -532,15 +688,10 @@ port_close(struct port *c)
 		panic();
 	}
 #endif
+	port_log(c);
+	log_puts(": closed\n");
 	c->state = PORT_CFG;
 	port_mio_close(c);
-
-	for (i = 0; i < MIDI_NEP; i++) {
-		ep = midi_ep + i;
-		if ((ep->txmask & c->midi->self) ||
-		    (c->midi->txmask & ep->self))
-			ep->ops->exit(ep->arg);
-	}
 	return 1;
 }
 

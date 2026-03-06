@@ -16,7 +16,6 @@
  */
 
 #include <sys/types.h>
-#include <sys/stat.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -54,16 +53,21 @@ sio_open(const char *str, unsigned int mode, int nbio)
 	if (str == NULL) /* backward compat */
 		str = devany;
 	if (strcmp(str, devany) == 0 && !issetugid()) {
-		str = getenv("AUDIODEVICE");
+		if ((mode & SIO_PLAY) == 0)
+			str = getenv("AUDIORECDEVICE");
+		if ((mode & SIO_REC) == 0)
+			str = getenv("AUDIOPLAYDEVICE");
+		if (mode == (SIO_PLAY | SIO_REC) || str == NULL)
+			str = getenv("AUDIODEVICE");
 		if (str == NULL)
 			str = devany;
 	}
 	if (strcmp(str, devany) == 0) {
-		hdl = _sio_aucat_open("snd/0", mode, nbio);
+		hdl = _sio_aucat_open("snd/default", mode, nbio);
 		if (hdl != NULL)
 			return hdl;
 #if defined(USE_SUN)
-		return _sio_sun_open("rsnd/default", mode, nbio);
+		return _sio_sun_open("rsnd/0", mode, nbio);
 #elif defined(USE_OSS)
 		return _sio_oss_open("rsnd/default", mode, nbio);
 #elif defined(USE_ALSA)
@@ -142,6 +146,8 @@ sio_start(struct sio_hdl *hdl)
 int
 sio_stop(struct sio_hdl *hdl)
 {
+	if (hdl->ops->stop == NULL)
+		return sio_flush(hdl);
 	if (hdl->eof) {
 		DPRINTF("sio_stop: eof\n");
 		return 0;
@@ -152,6 +158,28 @@ sio_stop(struct sio_hdl *hdl)
 		return 0;
 	}
 	if (!hdl->ops->stop(hdl))
+		return 0;
+#ifdef DEBUG
+	DPRINTFN(2, "libsndio: polls: %llu, samples = %llu\n",
+	    hdl->pollcnt, hdl->cpos);
+#endif
+	hdl->started = 0;
+	return 1;
+}
+
+int
+sio_flush(struct sio_hdl *hdl)
+{
+	if (hdl->eof) {
+		DPRINTF("sio_flush: eof\n");
+		return 0;
+	}
+	if (!hdl->started) {
+		DPRINTF("sio_flush: not started\n");
+		hdl->eof = 1;
+		return 0;
+	}
+	if (!hdl->ops->flush(hdl))
 		return 0;
 #ifdef DEBUG
 	DPRINTFN(2, "libsndio: polls: %llu, samples = %llu\n",
@@ -238,7 +266,7 @@ sio_psleep(struct sio_hdl *hdl, int event)
 	}
 	for (;;) {
 		nfds = sio_pollfd(hdl, pfd, event);
-		while (poll(pfd, nfds, -1) < 0) {
+		while (poll(pfd, nfds, -1) == -1) {
 			if (errno == EINTR)
 				continue;
 			DPERROR("sio_psleep: poll");
@@ -312,10 +340,6 @@ sio_read(struct sio_hdl *hdl, void *buf, size_t len)
 		hdl->eof = 1;
 		return 0;
 	}
-	if (todo == 0) {
-		DPRINTF("sio_read: zero length read ignored\n");
-		return 0;
-	}
 	while (todo > 0) {
 		if (!sio_rdrop(hdl))
 			return 0;
@@ -351,10 +375,6 @@ sio_write(struct sio_hdl *hdl, const void *buf, size_t len)
 	if (!hdl->started || !(hdl->mode & SIO_PLAY)) {
 		DPRINTF("sio_write: playback not started\n");
 		hdl->eof = 1;
-		return 0;
-	}
-	if (todo == 0) {
-		DPRINTF("sio_write: zero length write ignored\n");
 		return 0;
 	}
 	while (todo > 0) {

@@ -1,6 +1,5 @@
-/*	$OpenBSD$	*/
 /*
- * Copyright (c) 2008-2012 Alexandre Ratchov <alex@caoua.org>
+ * Copyright (c) 2010 Jacob Meuser <jakemsr@sdf.lonestar.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -14,16 +13,21 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#ifndef DEFS_H
-#define DEFS_H
+#include <sys/types.h>
+#include <sys/socket.h>
+#include "bsd-compat.h"
 
-/*
- * limits
- */
-#define NCHAN_MAX	64		/* max channel in a stream */
-#define RATE_MIN	4000		/* min sample rate */
-#define RATE_MAX	192000		/* max sample rate */
-#define BITS_MIN	1		/* min bits per sample */
-#define BITS_MAX	32		/* max bits per sample */
+#ifndef HAVE_GETPEEREID
+int
+getpeereid(int s, uid_t *ruid, gid_t *rgid)
+{
+	struct ucred cr;
+	socklen_t len = sizeof(cr);
 
-#endif /* !defined(DEFS_H) */
+	if (getsockopt(s, SOL_SOCKET, SO_PEERCRED, &cr, &len) < 0)
+		return -1;
+	*ruid = cr.uid;
+	*rgid = cr.gid;
+	return 0;
+}
+#endif

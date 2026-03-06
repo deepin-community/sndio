@@ -1,6 +1,6 @@
 /*	$OpenBSD$	*/
 /*
- * Copyright (c) 2008-2012 Alexandre Ratchov <alex@caoua.org>
+ * Copyright (c) 2014-2020 Alexandre Ratchov <alex@caoua.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -14,16 +14,19 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#ifndef DEFS_H
-#define DEFS_H
+#ifndef DEV_SIOCTL_H
+#define DEV_SIOCTL_H
 
-/*
- * limits
- */
-#define NCHAN_MAX	64		/* max channel in a stream */
-#define RATE_MIN	4000		/* min sample rate */
-#define RATE_MAX	192000		/* max sample rate */
-#define BITS_MIN	1		/* min bits per sample */
-#define BITS_MAX	32		/* max bits per sample */
+#include "file.h"
 
-#endif /* !defined(DEFS_H) */
+struct dev;
+
+struct dev_sioctl {
+	struct sioctl_hdl *hdl;
+	struct file *file;
+};
+
+void dev_sioctl_open(struct dev *);
+void dev_sioctl_close(struct dev *);
+
+#endif /* !defined(DEV_SIOCTL_H) */

@@ -1,1 +1,2 @@
-libsndio/*.3
+usr/share/man/man3/sio*.3
+usr/share/man/man3/mio*.3

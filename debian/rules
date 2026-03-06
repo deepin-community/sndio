@@ -28,7 +28,7 @@ DEB_HOST_ARCH ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 	dh $@
 
 override_dh_auto_configure:
-	./configure --prefix=/usr --includedir=/usr/include --mandir=/usr/share/man --libdir=/usr/lib/$(DEB_HOST_MULTIARCH) --privsep-user=sndiod --with-libbsd "CFLAGS=$(CFLAGS) $(CPPFLAGS)" "LDFLAGS=$(LDFLAGS)" "CC=$(CC)"
+	./configure --prefix=/usr --includedir=/usr/include --mandir=/usr/share/man --libdir=/usr/lib/$(DEB_HOST_MULTIARCH) --pkgconfdir=/usr/lib/$(DEB_HOST_MULTIARCH)/pkgconfig --privsep-user=sndiod --with-libbsd "CFLAGS=$(CFLAGS) $(CPPFLAGS)" "LDFLAGS=$(LDFLAGS)" "CC=$(CC)"
 
 override_dh_installinit:
 	cp contrib/init.d.sndiod debian/sndiod.init

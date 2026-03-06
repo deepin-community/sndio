@@ -64,7 +64,7 @@ static void sio_alsa_onmove(struct sio_alsa_hdl *);
 static int sio_alsa_revents(struct sio_hdl *, struct pollfd *);
 static void sio_alsa_close(struct sio_hdl *);
 static int sio_alsa_start(struct sio_hdl *);
-static int sio_alsa_stop(struct sio_hdl *);
+static int sio_alsa_flush(struct sio_hdl *);
 static int sio_alsa_setpar(struct sio_hdl *, struct sio_par *);
 static int sio_alsa_getpar(struct sio_hdl *, struct sio_par *);
 static int sio_alsa_getcap(struct sio_hdl *, struct sio_cap *);
@@ -82,7 +82,8 @@ static struct sio_ops sio_alsa_ops = {
 	sio_alsa_write,
 	sio_alsa_read,
 	sio_alsa_start,
-	sio_alsa_stop,
+	NULL,
+	sio_alsa_flush,
 	sio_alsa_nfds,
 	sio_alsa_pollfd,
 	sio_alsa_revents,
@@ -445,7 +446,7 @@ sio_alsa_start(struct sio_hdl *sh)
 }
 
 static int
-sio_alsa_stop(struct sio_hdl *sh)
+sio_alsa_flush(struct sio_hdl *sh)
 {
 	struct sio_alsa_hdl *hdl = (struct sio_alsa_hdl *)sh;
 	int err;
@@ -476,7 +477,7 @@ sio_alsa_stop(struct sio_hdl *sh)
 			return 0;
 		}
 	}
-	DPRINTFN(2, "sio_alsa_stop: stopped\n");
+	DPRINTFN(2, "sio_alsa_flush: stopped\n");
 	return 1;
 }
 
@@ -489,8 +490,10 @@ sio_alsa_xrun(struct sio_alsa_hdl *hdl)
 	int wbpf;
 
 	DPRINTFN(2, "sio_alsa_xrun:\n");
+#ifdef DEBUG
 	if (_sndio_debug >= 2)
 		_sio_printpos(&hdl->sio);
+#endif
 
 	/*
 	 * we assume rused/wused are zero if rec/play modes are not
@@ -515,7 +518,7 @@ sio_alsa_xrun(struct sio_alsa_hdl *hdl)
 
 	DPRINTFN(2, "wsil = %d, cmove = %d, rdrop = %d\n", wsil, cmove, rdrop);
 
-	if (!sio_alsa_stop(&hdl->sio))
+	if (!sio_alsa_flush(&hdl->sio))
 		return 0;
 	if (!sio_alsa_start(&hdl->sio))
 		return 0;
@@ -552,6 +555,11 @@ sio_alsa_setpar_hw(snd_pcm_t *pcm, snd_pcm_hw_params_t *hwp,
 
 	req_rate = *rate;
 
+	err = snd_pcm_hw_free(pcm);
+	if (err < 0) {
+		DALSA("couldn't reset hw configuration", err);
+		return 0;
+	}
 	err = snd_pcm_hw_params_any(pcm, hwp);
 	if (err < 0) {
 		DALSA("couldn't init pars", err);
@@ -819,9 +827,9 @@ sio_alsa_setpar(struct sio_hdl *sh, struct sio_par *par)
 		return 0;
 	hdl->par.msb = 1;
 	hdl->par.bps = SIO_BPS(hdl->par.bits);
-	hdl->par.rate = irate;
-	hdl->par.round = iround;
-	hdl->par.bufsz = iround * iperiods;
+	hdl->par.rate = orate;
+	hdl->par.round = oround;
+	hdl->par.bufsz = oround * operiods;
 	hdl->par.appbufsz = hdl->par.bufsz;
 
 	/* software params */
@@ -875,7 +883,7 @@ sio_alsa_setpar(struct sio_hdl *sh, struct sio_par *par)
 			return 0;
 		}
 		err = snd_pcm_sw_params_set_start_threshold(hdl->opcm,
-		    oswp, hdl->par.bufsz);
+		    oswp, hdl->par.bufsz - hdl->par.round);
 		if (err < 0) {
 			DALSA("couldn't set play start threshold", err);
 			hdl->sio.eof = 1;

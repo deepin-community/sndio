@@ -5,8 +5,8 @@ Index: sndio-1.5.0/configure
 ===================================================================
 --- sndio-1.5.0.orig/configure
 +++ sndio-1.5.0/configure
-@@ -62,6 +62,22 @@ case `uname` in
- 		so_link="libsndio.so"
+@@ -69,6 +69,22 @@ case `uname` in
+ 		so_ldflags="-Wl,-soname=libsndio.so.\${MAJ}"
  		defs='-D_GNU_SOURCE -DHAVE_SOCK_CLOEXEC -DHAVE_CLOCK_GETTIME'
  		;;
 +	GNU/kFreeBSD) # OSS output support on kFreeBSD, but otherwise like linux

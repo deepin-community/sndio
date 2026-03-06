@@ -1,0 +1,73 @@
+From 8804f4d05ecef35114b1d392c065c3179821f261 Mon Sep 17 00:00:00 2001
+From: Peter Piwowarski <peterjpiwowarski@gmail.com>
+Date: Thu, 22 Sep 2022 12:52:20 +0200
+Subject: [PATCH 1/2] configure: Add check for linux-generic is already the
+ newest version (5.8.0.16.18).
+
+---
+ configure | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/configure b/configure
+index 2ceaf48..9190221 100755
+--- a/configure
++++ b/configure
+@@ -69,6 +69,22 @@ case `uname` in
+ 		so_ldflags="-Wl,-soname=libsndio.so.\${MAJ}"
+ 		defs='-D_GNU_SOURCE -DHAVE_SOCK_CLOEXEC -DHAVE_CLOCK_GETTIME'
+ 		;;
++	GNU/kFreeBSD) # OSS output support on kFreeBSD, but otherwise like linux
++		oss=yes
++		ldadd="-lrt"
++		user=sndiod
++		so_ldflags="-Wl,-soname=libsndio.so.\${MAJ}.\${MIN}"
++		so_link="libsndio.so"
++		defs='-D_GNU_SOURCE -DHAVE_SOCK_CLOEXEC -DHAVE_CLOCK_GETTIME'
++		;;
++	GNU) # No output support on Hurd, but otherwise like linux
++		oss=no
++		ldadd="-lrt"
++		user=sndiod
++		so_ldflags="-Wl,-soname=libsndio.so.\${MAJ}.\${MIN}"
++		so_link="libsndio.so"
++		defs='-D_GNU_SOURCE -DHAVE_SOCK_CLOEXEC -DHAVE_CLOCK_GETTIME'
++		;;
+ 	NetBSD)
+ 		sun=no
+ 		rmidi=yes
+
+From d8e312c480b55a21cb1ad5a721e6936c71ea343a Mon Sep 17 00:00:00 2001
+From: Gianfranco Costamagna <costamagnagianfranco@yahoo.it>
+Date: Thu, 22 Sep 2022 13:02:38 +0200
+Subject: [PATCH 2/2] configure: Fix GNU and KfreeBSD with last fixes from
+ master branch
+
+---
+ configure | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/configure b/configure
+index 9190221..dc8d606 100755
+--- a/configure
++++ b/configure
+@@ -73,16 +73,16 @@ case `uname` in
+ 		oss=yes
+ 		ldadd="-lrt"
+ 		user=sndiod
+-		so_ldflags="-Wl,-soname=libsndio.so.\${MAJ}.\${MIN}"
+-		so_link="libsndio.so"
++		so_ldflags="-Wl,-soname=libsndio.so.\${MAJ}"
++		so_link="libsndio.so libsndio.so.\${MAJ} libsndio.so.\${MAJ}.0"
+ 		defs='-D_GNU_SOURCE -DHAVE_SOCK_CLOEXEC -DHAVE_CLOCK_GETTIME'
+ 		;;
+ 	GNU) # No output support on Hurd, but otherwise like linux
+ 		oss=no
+ 		ldadd="-lrt"
+ 		user=sndiod
+-		so_ldflags="-Wl,-soname=libsndio.so.\${MAJ}.\${MIN}"
+-		so_link="libsndio.so"
++		so_ldflags="-Wl,-soname=libsndio.so.\${MAJ}"
++		so_link="libsndio.so libsndio.so.\${MAJ} libsndio.so.\${MAJ}.0"
+ 		defs='-D_GNU_SOURCE -DHAVE_SOCK_CLOEXEC -DHAVE_CLOCK_GETTIME'
+ 		;;
+ 	NetBSD)

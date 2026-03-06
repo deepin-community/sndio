@@ -2,14 +2,16 @@ Source: sndio
 Section: sound
 Priority: optional
 Maintainer: Peter Piwowarski <peterjpiwowarski@gmail.com>
-Build-Depends: debhelper (>= 11), libasound2-dev [linux-any], oss4-dev [kfreebsd-any], libbsd-dev
-Standards-Version: 4.2.1
-Homepage: http://www.sndio.org/
+Build-Depends: debhelper-compat (= 13), libasound2-dev [linux-any], oss4-dev [kfreebsd-any], libbsd-dev
+Standards-Version: 4.6.1
+Homepage: https://www.sndio.org/
 
 Package: libsndio7.0
 Section: libs
 Architecture: any
 Multi-Arch: same
+Breaks: libsndio7.1 (<= 1.8.1-1~exp2)
+Replaces: libsndio7.1 (<= 1.8.1-1~exp2)
 Pre-Depends: ${misc:Pre-Depends}
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Suggests: sndiod

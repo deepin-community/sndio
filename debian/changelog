@@ -1,3 +1,67 @@
+sndio (1.9.0-0.3) unstable; urgency=medium
+
+  * Non-maintainer upload
+  * Fix symbols file for non-linux archs.
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Fri, 23 Sep 2022 09:21:58 +0200
+
+sndio (1.9.0-0.2) unstable; urgency=medium
+
+  * Non-maintainer upload
+  * debian/patches/peerid.patch:
+    - Add new patch to fix a GNU/Hurd build failure.
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Fri, 23 Sep 2022 09:13:24 +0200
+
+sndio (1.9.0-0.1) unstable; urgency=medium
+
+  * Non-maintainer upload
+  * New upstream release
+  * Drop one patch now upstream
+  * Add two new symbols
+  * Bump std-version to 4.6.1
+  * Don't add anymore symlink to 7.0, its
+    done by upstream build system now
+  * Upstream patch to fix build on non-linux systems.
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Thu, 22 Sep 2022 11:53:55 +0200
+
+sndio (1.8.1-1.1) unstable; urgency=medium
+
+  * Non-maintainer upload
+  * Upload to sid
+  * Back to libsndio7.0 due to request from Release Team.
+    - Break/Replaces libsndio7.1 to make sure there is an upgrade path
+      from the library that appeared only in experimental and ubuntu jammy
+  * Add compatibility symlink with old libsndio7.0 library
+  * Bump symbols file versions to 1.8.1 to make sure reverse-dependencies pick
+    up the new library
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Thu, 10 Mar 2022 21:40:58 +0100
+
+sndio (1.8.1-1~exp2) experimental; urgency=medium
+
+  * Non-maintainer upload
+  * Add a proposed upstream patch to cleanup a symlink preventing double
+    builds.
+  * Fix installation of manpages from installation directory and not from
+    source directory, fixing some dh_missing complain
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Sun, 06 Mar 2022 12:19:22 +0100
+
+sndio (1.8.1-1~exp1) experimental; urgency=medium
+
+  * Non-maintainer upload
+  * New upstream release (Closes: #975734)
+  * Bump compat level to 13
+  * Bump soname to 7.1
+  * Add new symbols to symbols file
+  * Refresh patch
+  * Also install pkgconfig file
+  * Also install sndioctl in tools package
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Fri, 04 Mar 2022 20:40:59 +0100
+
 sndio (1.5.0-3) unstable; urgency=medium
 
   * Set SONAME properly on !linux, from Samuel Thibault (Closes: 912453)

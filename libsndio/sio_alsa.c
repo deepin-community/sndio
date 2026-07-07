@@ -55,6 +55,7 @@ struct sio_alsa_hdl {
 	int idelta, odelta;		/* position reported to client */
 	int nfds, infds, onfds;
 	int running;
+	int initialized;
 	int events;
 	int ipartial, opartial;
 	char *itmpbuf, *otmpbuf;
@@ -64,7 +65,7 @@ static void sio_alsa_onmove(struct sio_alsa_hdl *);
 static int sio_alsa_revents(struct sio_hdl *, struct pollfd *);
 static void sio_alsa_close(struct sio_hdl *);
 static int sio_alsa_start(struct sio_hdl *);
-static int sio_alsa_stop(struct sio_hdl *);
+static int sio_alsa_flush(struct sio_hdl *);
 static int sio_alsa_setpar(struct sio_hdl *, struct sio_par *);
 static int sio_alsa_getpar(struct sio_hdl *, struct sio_par *);
 static int sio_alsa_getcap(struct sio_hdl *, struct sio_cap *);
@@ -82,7 +83,8 @@ static struct sio_ops sio_alsa_ops = {
 	sio_alsa_write,
 	sio_alsa_read,
 	sio_alsa_start,
-	sio_alsa_stop,
+	NULL,
+	sio_alsa_flush,
 	sio_alsa_nfds,
 	sio_alsa_pollfd,
 	sio_alsa_revents,
@@ -272,12 +274,40 @@ sio_alsa_enctofmt(struct sio_alsa_hdl *hdl, snd_pcm_format_t *rfmt,
 	}
 }
 
+static int
+sio_alsa_init(struct sio_alsa_hdl *hdl)
+{
+	struct sio_par par;
+
+	if (hdl->initialized)
+		return 1;
+
+	/*
+	 * Default parameters may not be compatible with libsndio (eg. mulaw
+	 * encodings, different playback and recording parameters, etc...), so
+	 * set parameters to a random value. If the requested parameters are
+	 * not supported by the device, then sio_setpar() will pick supported
+	 * ones.
+	 */
+	sio_initpar(&par);
+	par.bits = 16;
+	par.le = SIO_LE_NATIVE;
+	par.rate = 48000;
+	if (hdl->sio.mode & SIO_PLAY)
+		par.pchan = 2;
+	if (hdl->sio.mode & SIO_REC)
+		par.rchan = 2;
+	if (!sio_alsa_setpar(&hdl->sio, &par))
+		return 0;
+
+	return 1;
+}
+
 struct sio_hdl *
 _sio_alsa_open(const char *str, unsigned mode, int nbio)
 {
 	const char *p;
 	struct sio_alsa_hdl *hdl;
-	struct sio_par par;
 	size_t len;
 	int err;
 
@@ -328,6 +358,7 @@ _sio_alsa_open(const char *str, unsigned mode, int nbio)
 			goto bad_free_opcm;
 		}
 	}
+	hdl->initialized = 0;
 
 	/*
 	 * snd_pcm_poll_descriptors_count returns a small value
@@ -335,27 +366,7 @@ _sio_alsa_open(const char *str, unsigned mode, int nbio)
 	 */
 	hdl->nfds = SIO_MAXNFDS;
 
-	/*
-	 * Default parameters may not be compatible with libsndio (eg. mulaw
-	 * encodings, different playback and recording parameters, etc...), so
-	 * set parameters to a random value. If the requested parameters are
-	 * not supported by the device, then sio_setpar() will pick supported
-	 * ones.
-	 */
-	sio_initpar(&par);
-	par.bits = 16;
-	par.le = SIO_LE_NATIVE;
-	par.rate = 48000;
-	if (mode & SIO_PLAY)
-		par.pchan = 2;
-	if (mode & SIO_REC)
-		par.rchan = 2;
-	if (!sio_setpar(&hdl->sio, &par))
-		goto bad_free_ipcm;
 	return (struct sio_hdl *)hdl;
-bad_free_ipcm:
-	if (mode & SIO_REC)
-		snd_pcm_close(hdl->ipcm);
 bad_free_opcm:
 	if (mode & SIO_PLAY)
 		snd_pcm_close(hdl->opcm);
@@ -386,6 +397,14 @@ sio_alsa_start(struct sio_hdl *sh)
 	int err;
 
 	DPRINTFN(2, "sio_alsa_start:\n");
+
+	/*
+	 * Starting with neither sio_setpar() nor sio_getpar() doesn't
+	 * make sense, so we could just fail instead of initializing
+	 * the device. Buf for now, let's do what other platforms do.
+	 */
+	if (!sio_alsa_init(hdl))
+		return 0;
 
 	hdl->ibpf = hdl->par.rchan * hdl->par.bps;
 	hdl->obpf = hdl->par.pchan * hdl->par.bps;
@@ -445,7 +464,7 @@ sio_alsa_start(struct sio_hdl *sh)
 }
 
 static int
-sio_alsa_stop(struct sio_hdl *sh)
+sio_alsa_flush(struct sio_hdl *sh)
 {
 	struct sio_alsa_hdl *hdl = (struct sio_alsa_hdl *)sh;
 	int err;
@@ -476,7 +495,7 @@ sio_alsa_stop(struct sio_hdl *sh)
 			return 0;
 		}
 	}
-	DPRINTFN(2, "sio_alsa_stop: stopped\n");
+	DPRINTFN(2, "sio_alsa_flush: stopped\n");
 	return 1;
 }
 
@@ -489,8 +508,10 @@ sio_alsa_xrun(struct sio_alsa_hdl *hdl)
 	int wbpf;
 
 	DPRINTFN(2, "sio_alsa_xrun:\n");
+#ifdef DEBUG
 	if (_sndio_debug >= 2)
 		_sio_printpos(&hdl->sio);
+#endif
 
 	/*
 	 * we assume rused/wused are zero if rec/play modes are not
@@ -515,7 +536,7 @@ sio_alsa_xrun(struct sio_alsa_hdl *hdl)
 
 	DPRINTFN(2, "wsil = %d, cmove = %d, rdrop = %d\n", wsil, cmove, rdrop);
 
-	if (!sio_alsa_stop(&hdl->sio))
+	if (!sio_alsa_flush(&hdl->sio))
 		return 0;
 	if (!sio_alsa_start(&hdl->sio))
 		return 0;
@@ -549,9 +570,15 @@ sio_alsa_setpar_hw(snd_pcm_t *pcm, snd_pcm_hw_params_t *hwp,
 	};
 	int i, err, dir = 0;
 	unsigned req_rate, min_periods = 2;
+	unsigned int sample_size, period_mask;
 
 	req_rate = *rate;
 
+	err = snd_pcm_hw_free(pcm);
+	if (err < 0) {
+		DALSA("couldn't reset hw configuration", err);
+		return 0;
+	}
 	err = snd_pcm_hw_params_any(pcm, hwp);
 	if (err < 0) {
 		DALSA("couldn't init pars", err);
@@ -613,8 +640,25 @@ sio_alsa_setpar_hw(snd_pcm_t *pcm, snd_pcm_hw_params_t *hwp,
 		return 0;
 	}
 
+	/*
+	 * Make sure that the period size is multiple of 64B
+	 * to workaround possible driver bugs. Try to allow small
+	 * period sizes if the sample size is allows to do so.
+	 */
+	sample_size = snd_pcm_format_size(*reqfmt, 1);
+	switch (sample_size) {
+	case 4:
+		period_mask = 15;
+		break;
+	case 2:
+		period_mask = 31;
+		break;
+	default:
+		period_mask = 63;
+	}
+
 	*round = *round * *rate / req_rate;
-	*round = (*round + 31) & ~31;
+	*round = (*round + period_mask) & ~period_mask;
 
 	err = snd_pcm_hw_params_set_period_size_near(pcm, hwp, round, &dir);
 	if (err < 0) {
@@ -819,9 +863,9 @@ sio_alsa_setpar(struct sio_hdl *sh, struct sio_par *par)
 		return 0;
 	hdl->par.msb = 1;
 	hdl->par.bps = SIO_BPS(hdl->par.bits);
-	hdl->par.rate = irate;
-	hdl->par.round = iround;
-	hdl->par.bufsz = iround * iperiods;
+	hdl->par.rate = orate;
+	hdl->par.round = oround;
+	hdl->par.bufsz = oround * operiods;
 	hdl->par.appbufsz = hdl->par.bufsz;
 
 	/* software params */
@@ -875,7 +919,7 @@ sio_alsa_setpar(struct sio_hdl *sh, struct sio_par *par)
 			return 0;
 		}
 		err = snd_pcm_sw_params_set_start_threshold(hdl->opcm,
-		    oswp, hdl->par.bufsz);
+		    oswp, hdl->par.bufsz - hdl->par.round);
 		if (err < 0) {
 			DALSA("couldn't set play start threshold", err);
 			hdl->sio.eof = 1;
@@ -916,6 +960,7 @@ sio_alsa_setpar(struct sio_hdl *sh, struct sio_par *par)
 			snd_pcm_dump(hdl->opcm, output);
 	}
 #endif
+	hdl->initialized = 1;
 	return 1;
 }
 
@@ -923,6 +968,9 @@ static int
 sio_alsa_getpar(struct sio_hdl *sh, struct sio_par *par)
 {
 	struct sio_alsa_hdl *hdl = (struct sio_alsa_hdl *)sh;
+
+	if (!sio_alsa_init(hdl))
+		return 0;
 
 	*par = hdl->par;
 	return 1;

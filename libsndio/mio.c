@@ -17,7 +17,6 @@
 
 #include <sys/types.h>
 #include <sys/time.h>
-#include <sys/stat.h>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -108,7 +107,7 @@ mio_psleep(struct mio_hdl *hdl, int event)
 	}
 	for (;;) {
 		nfds = mio_pollfd(hdl, pfd, event);
-		while (poll(pfd, nfds, -1) < 0) {
+		while (poll(pfd, nfds, -1) == -1) {
 			if (errno == EINTR)
 				continue;
 			DPERROR("mio_psleep: poll");
@@ -142,10 +141,6 @@ mio_read(struct mio_hdl *hdl, void *buf, size_t len)
 		hdl->eof = 1;
 		return 0;
 	}
-	if (len == 0) {
-		DPRINTF("mio_read: zero length read ignored\n");
-		return 0;
-	}
 	while (todo > 0) {
 		n = hdl->ops->read(hdl, data, todo);
 		if (n == 0 && hdl->eof)
@@ -174,14 +169,6 @@ mio_write(struct mio_hdl *hdl, const void *buf, size_t len)
 	if (!(hdl->mode & MIO_OUT)) {
 		DPRINTF("mio_write: not output device\n");
 		hdl->eof = 1;
-		return 0;
-	}
-	if (len == 0) {
-		DPRINTF("mio_write: zero length write ignored\n");
-		return 0;
-	}
-	if (todo == 0) {
-		DPRINTF("mio_write: zero length write ignored\n");
 		return 0;
 	}
 	while (todo > 0) {

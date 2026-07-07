@@ -1,1 +1,1 @@
-#define VERSION "sndio 1.5.0"
+#define VERSION "sndio 1.10.0"

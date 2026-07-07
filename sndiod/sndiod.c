@@ -68,7 +68,7 @@
  * block size if neither ``-z'' nor ``-b'' is used
  */
 #ifndef DEFAULT_ROUND
-#define DEFAULT_ROUND	960
+#define DEFAULT_ROUND	480
 #endif
 
 /*
@@ -79,13 +79,14 @@
 #endif
 
 /*
- * default device in server mode
+ * default device precision
  */
-#ifndef DEFAULT_DEV
-#define DEFAULT_DEV "rsnd/default"
+#ifndef DEFAULT_BITS
+#define DEFAULT_BITS	16
 #endif
 
 void sigint(int);
+void sighup(int);
 void opt_ch(int *, int *);
 void opt_enc(struct aparams *);
 int opt_mmc(void);
@@ -102,12 +103,34 @@ struct opt *mkopt(char *, struct dev *,
     int, int, int, int, int, int, int, int);
 
 unsigned int log_level = 0;
-volatile sig_atomic_t quit_flag = 0;
+volatile sig_atomic_t quit_flag = 0, reopen_flag = 0;
 
 char usagestr[] = "usage: sndiod [-d] [-a flag] [-b nframes] "
-    "[-C min:max] [-c min:max] [-e enc]\n\t"
-    "[-f device] [-j flag] [-L addr] [-m mode] [-q port] [-r rate]\n\t"
-    "[-s name] [-t mode] [-U unit] [-v volume] [-w flag] [-z nframes]\n";
+    "[-C min:max] [-c min:max]\n\t"
+    "[-e enc] [-F device] [-f device] [-j flag] [-L addr] [-m mode]\n\t"
+    "[-Q port] [-q port] [-r rate] [-s name] [-t mode] [-U unit]\n\t"
+    "[-v volume] [-w flag] [-z nframes]\n";
+
+/*
+ * default audio devices
+ */
+static char *default_devs[] = {
+#ifdef DEFAULT_DEV
+	DEFAULT_DEV,
+#else
+	"rsnd/0", "rsnd/1", "rsnd/2", "rsnd/3",
+#endif
+	NULL
+};
+
+/*
+ * default MIDI ports
+ */
+static char *default_ports[] = {
+	"rmidi/0", "rmidi/1", "rmidi/2", "rmidi/3",
+	"rmidi/4", "rmidi/5", "rmidi/6", "rmidi/7",
+	NULL
+};
 
 /*
  * SIGINT handler, it raises the quit flag. If the flag is already set,
@@ -120,6 +143,16 @@ sigint(int s)
 	if (quit_flag)
 		_exit(1);
 	quit_flag = 1;
+}
+
+/*
+ * SIGHUP handler, it raises the reopen flag, which requests devices
+ * to be reopened.
+ */
+void
+sighup(int s)
+{
+	reopen_flag = 1;
 }
 
 void
@@ -218,20 +251,105 @@ opt_mode(void)
 	return mode;
 }
 
+/*
+ * Open all devices. Possibly switch to the new devices if they have higher
+ * priorities than the current ones.
+ */
+static void
+reopen_devs(void)
+{
+	struct opt *o;
+	struct dev *d, *a;
+
+	for (o = opt_list; o != NULL; o = o->next) {
+
+		/* skip unused logical devices and ones with fixed hardware */
+		if (o->refcnt == 0 || strcmp(o->name, o->dev->name) == 0)
+			continue;
+
+		/* circulate to the device with the highest prio */
+		a = o->alt_first;
+		for (d = a; d->alt_next != a; d = d->alt_next) {
+			if (d->num > o->alt_first->num)
+				o->alt_first = d;
+		}
+
+		/* switch to the first working one, in pririty order */
+		d = o->alt_first;
+		while (d != o->dev) {
+			if (opt_setdev(o, d))
+				break;
+			d = d->alt_next;
+		}
+	}
+
+	/*
+	 * retry to open the remaining devices that are not used but need
+	 * to stay open (ex. '-a on')
+	 */
+	for (d = dev_list; d != NULL; d = d->next) {
+		if (d->refcnt > 0 && d->pstate == DEV_CFG)
+			dev_open(d);
+	}
+}
+
+/*
+ * For each port, open the alt with the highest priority and switch to it
+ */
+static void
+reopen_ports(void)
+{
+	struct port *p, *a, *apri;
+	int inuse;
+
+	for (p = port_list; p != NULL; p = a->next) {
+
+		/* skip unused ports */
+		inuse = 0;
+		a = p;
+		while (1) {
+			if (midi_rxmask(a->midi) || a->midi->txmask)
+				inuse = 1;
+			if (a->alt_next == p)
+				break;
+			a = a->alt_next;
+		}
+		if (!inuse)
+			continue;
+
+		/* open the alt with the highest prio */
+		apri = port_alt_ref(p->num);
+
+		/* switch to it */
+		a = p;
+		while (1) {
+			if (a != apri) {
+				midi_migrate(a->midi, apri->midi);
+				port_unref(a);
+			}
+			if (a->alt_next == p)
+				break;
+			a = a->alt_next;
+		}
+	}
+}
+
 void
 setsig(void)
 {
 	struct sigaction sa;
 
 	quit_flag = 0;
+	reopen_flag = 0;
 	sigfillset(&sa.sa_mask);
 	sa.sa_flags = SA_RESTART;
 	sa.sa_handler = sigint;
-	if (sigaction(SIGINT, &sa, NULL) < 0)
+	if (sigaction(SIGINT, &sa, NULL) == -1)
 		err(1, "sigaction(int) failed");
-	if (sigaction(SIGTERM, &sa, NULL) < 0)
+	if (sigaction(SIGTERM, &sa, NULL) == -1)
 		err(1, "sigaction(term) failed");
-	if (sigaction(SIGHUP, &sa, NULL) < 0)
+	sa.sa_handler = sighup;
+	if (sigaction(SIGHUP, &sa, NULL) == -1)
 		err(1, "sigaction(hup) failed");
 }
 
@@ -243,11 +361,11 @@ unsetsig(void)
 	sigfillset(&sa.sa_mask);
 	sa.sa_flags = SA_RESTART;
 	sa.sa_handler = SIG_DFL;
-	if (sigaction(SIGHUP, &sa, NULL) < 0)
+	if (sigaction(SIGHUP, &sa, NULL) == -1)
 		err(1, "unsetsig(hup): sigaction failed");
-	if (sigaction(SIGTERM, &sa, NULL) < 0)
+	if (sigaction(SIGTERM, &sa, NULL) == -1)
 		err(1, "unsetsig(term): sigaction failed");
-	if (sigaction(SIGINT, &sa, NULL) < 0)
+	if (sigaction(SIGINT, &sa, NULL) == -1)
 		err(1, "unsetsig(int): sigaction failed");
 }
 
@@ -267,12 +385,12 @@ getbasepath(char *base)
 		snprintf(base, SOCKPATH_MAX, SOCKPATH_DIR "-%u", uid);
 	}
 	omask = umask(mask);
-	if (mkdir(base, 0777) < 0) {
+	if (mkdir(base, 0777) == -1) {
 		if (errno != EEXIST)
 			err(1, "mkdir(\"%s\")", base);
 	}
 	umask(omask);
-	if (stat(base, &sb) < 0)
+	if (stat(base, &sb) == -1)
 		err(1, "stat(\"%s\")", base);
 	if (!S_ISDIR(sb.st_mode))
 		errx(1, "%s is not a directory", base);
@@ -336,15 +454,16 @@ mkopt(char *path, struct dev *d,
 int
 main(int argc, char **argv)
 {
-	int c, background, unit;
+	int c, i, background, unit;
 	int pmin, pmax, rmin, rmax;
 	char base[SOCKPATH_MAX], path[SOCKPATH_MAX];
 	unsigned int mode, dup, mmc, vol;
 	unsigned int hold, autovol, bufsz, round, rate;
 	const char *str;
 	struct aparams par;
-	struct dev *d;
-	struct port *p;
+	struct opt *o;
+	struct dev *d, *dev_first, *dev_next;
+	struct port *p, *port_first, *port_next;
 	struct listen *l;
 	struct passwd *pw;
 	struct tcpaddr {
@@ -357,11 +476,11 @@ main(int argc, char **argv)
 	/*
 	 * global options defaults
 	 */
-	vol = 118;
+	vol = 127;
 	dup = 1;
 	mmc = 0;
 	hold = 0;
-	autovol = 1;
+	autovol = 0;
 	bufsz = 0;
 	round = 0;
 	rate = DEFAULT_RATE;
@@ -371,11 +490,22 @@ main(int argc, char **argv)
 	pmax = 1;
 	rmin = 0;
 	rmax = 1;
-	aparams_init(&par);
+	par.bits = DEFAULT_BITS;
+	par.bps = APARAMS_BPS(par.bits);
+	par.le = ADATA_LE;
+	par.sig = 1;
+	par.msb = 0;
 	mode = MODE_PLAY | MODE_REC;
+	dev_first = dev_next = NULL;
+	port_first = port_next = NULL;
 	tcpaddr_list = NULL;
+	d = NULL;
+	p = NULL;
 
-	while ((c = getopt(argc, argv, "a:b:c:C:de:f:j:L:m:q:r:s:t:U:v:w:x:z:")) != -1) {
+	slot_array_init();
+
+	while ((c = getopt(argc, argv,
+	    "a:b:c:C:de:F:f:j:L:m:Q:q:r:s:t:U:v:w:x:z:")) != -1) {
 		switch (c) {
 		case 'd':
 			log_level++;
@@ -421,16 +551,30 @@ main(int argc, char **argv)
 				errx(1, "%s: volume is %s", optarg, str);
 			break;
 		case 's':
-			if ((d = dev_list) == NULL) {
-				d = mkdev(DEFAULT_DEV, &par, 0, bufsz, round,
-				    rate, hold, autovol);
+			if (d == NULL) {
+				for (i = 0; default_devs[i] != NULL; i++) {
+					mkdev(default_devs[i], &par, 0,
+					    bufsz, round, rate, 0, autovol);
+				}
+				d = dev_list;
 			}
 			if (mkopt(optarg, d, pmin, pmax, rmin, rmax,
 				mode, vol, mmc, dup) == NULL)
 				return 1;
 			break;
 		case 'q':
-			mkport(optarg, hold);
+			p = mkport(optarg, hold);
+			/* create new circulate list */
+			port_first = port_next = p;
+			break;
+		case 'Q':
+			if (p == NULL)
+				errx(1, "-Q %s: no ports defined", optarg);
+			p = mkport(optarg, hold);
+			/* add to circulate list */
+			p->alt_next = port_next;
+			port_first->alt_next = p;
+			port_next = p;
 			break;
 		case 'a':
 			hold = opt_onoff();
@@ -449,8 +593,20 @@ main(int argc, char **argv)
 				errx(1, "%s: block size is %s", optarg, str);
 			break;
 		case 'f':
-			mkdev(optarg, &par, 0, bufsz, round,
+			d = mkdev(optarg, &par, 0, bufsz, round,
 			    rate, hold, autovol);
+			/* create new circulate list */
+			dev_first = dev_next = d;
+			break;
+		case 'F':
+			if (d == NULL)
+				errx(1, "-F %s: no devices defined", optarg);
+			d = mkdev(optarg, &par, 0, bufsz, round,
+			    rate, hold, autovol);
+			/* add to circulate list */
+			d->alt_next = dev_next;
+			dev_first->alt_next = d;
+			dev_next = d;
 			break;
 		default:
 			fputs(usagestr, stderr);
@@ -463,14 +619,37 @@ main(int argc, char **argv)
 		fputs(usagestr, stderr);
 		return 1;
 	}
-	if (dev_list == NULL)
-		mkdev(DEFAULT_DEV, &par, 0, bufsz, round, rate, hold, autovol);
-	for (d = dev_list; d != NULL; d = d->next) {
-		if (opt_byname(d, "default"))
-			continue;
-		if (mkopt("default", d, pmin, pmax, rmin, rmax,
-			mode, vol, mmc, dup) == NULL)
+	if (port_list == NULL) {
+		for (i = 0; default_ports[i] != NULL; i++)
+			mkport(default_ports[i], 0);
+	}
+	if (dev_list == NULL) {
+		for (i = 0; default_devs[i] != NULL; i++) {
+			mkdev(default_devs[i], &par, 0,
+			    bufsz, round, rate, 0, autovol);
+		}
+	}
+
+	/*
+	 * Add default sub-device (if none) backed by the last device
+	 */
+	o = opt_byname("default");
+	if (o == NULL) {
+		o = mkopt("default", dev_list, pmin, pmax, rmin, rmax,
+		    mode, vol, 0, dup);
+		if (o == NULL)
 			return 1;
+	}
+
+	/*
+	 * For each device create an anonymous sub-device using
+	 * the "default" sub-device as template
+	 */
+	for (d = dev_list; d != NULL; d = d->next) {
+		if (opt_new(d, NULL, o->pmin, o->pmax, o->rmin, o->rmax,
+			o->maxweight, o->mtc != NULL, o->dup, o->mode) == NULL)
+			return 1;
+		dev_adjpar(d, o->mode, o->pmax, o->rmax);
 	}
 
 	setsig();
@@ -502,23 +681,31 @@ main(int argc, char **argv)
 		if (!dev_init(d))
 			return 1;
 	}
+	for (o = opt_list; o != NULL; o = o->next)
+		opt_init(o);
 	if (background) {
 		log_flush();
 		log_level = 0;
-		if (daemon(0, 0) < 0)
+		if (daemon(0, 0) == -1)
 			err(1, "daemon");
 	}
 	if (pw != NULL) {
-		if (setpriority(PRIO_PROCESS, 0, SNDIO_PRIO) < 0)
+		if (setpriority(PRIO_PROCESS, 0, SNDIO_PRIO) == -1)
 			err(1, "setpriority");
-		if (setgroups(1, &pw->pw_gid) ||
-		    setgid(pw->pw_gid) ||
-		    setuid(pw->pw_uid))
+		if (setgroups(1, &pw->pw_gid) == -1 ||
+		    setgid(pw->pw_gid) == -1 ||
+		    setuid(pw->pw_uid) == -1)
 			err(1, "cannot drop privileges");
 	}
+
 	for (;;) {
 		if (quit_flag)
 			break;
+		if (reopen_flag) {
+			reopen_flag = 0;
+			reopen_devs();
+			reopen_ports();
+		}
 		if (!file_poll())
 			break;
 	}
@@ -526,6 +713,8 @@ main(int argc, char **argv)
 		listen_close(listen_list);
 	while (sock_list != NULL)
 		sock_close(sock_list);
+	for (o = opt_list; o != NULL; o = o->next)
+		opt_done(o);
 	for (d = dev_list; d != NULL; d = d->next)
 		dev_done(d);
 	for (p = port_list; p != NULL; p = p->next)
@@ -534,6 +723,8 @@ main(int argc, char **argv)
 		; /* nothing */
 	midi_done();
 
+	while (opt_list)
+		opt_del(opt_list);
 	while (dev_list)
 		dev_del(dev_list);
 	while (port_list)

@@ -40,7 +40,7 @@
  *	from the callback
  *
  *	the timeout can be aborted with timo_del(), it is OK to try to
- *	abort a timout that has expired
+ *	abort a timeout that has expired
  *
  */
 
@@ -64,7 +64,7 @@
 void timo_update(unsigned int);
 void timo_init(void);
 void timo_done(void);
-void file_process(struct file *, struct pollfd *);
+int file_process(struct file *, struct pollfd *);
 
 struct timespec file_ts;
 struct file *file_list;
@@ -144,7 +144,7 @@ timo_del(struct timo *o)
 
 /*
  * routine to be called by the timer when 'delta' 24-th of microsecond
- * elapsed. This routine updates time referece used by timeouts and
+ * elapsed. This routine updates time reference used by timeouts and
  * calls expired timeouts
  */
 void
@@ -235,6 +235,7 @@ file_new(struct fileops *ops, void *arg, char *name, unsigned int nfds)
 	}
 	f = xmalloc(sizeof(struct file));
 	f->max_nfds = nfds;
+	f->nfds = 0;
 	f->ops = ops;
 	f->arg = arg;
 	f->name = name;
@@ -270,10 +271,10 @@ file_del(struct file *f)
 #endif
 }
 
-void
+int
 file_process(struct file *f, struct pollfd *pfd)
 {
-	int revents;
+	int rc, revents;
 #ifdef DEBUG
 	struct timespec ts0, ts1;
 	long us;
@@ -283,14 +284,21 @@ file_process(struct file *f, struct pollfd *pfd)
 	if (log_level >= 3)
 		clock_gettime(CLOCK_UPTIME, &ts0);
 #endif
+	rc = 0;
 	revents = (f->state != FILE_ZOMB) ?
 	    f->ops->revents(f->arg, pfd) : 0;
-	if ((revents & POLLHUP) && (f->state != FILE_ZOMB))
+	if ((revents & POLLHUP) && (f->state != FILE_ZOMB)) {
 		f->ops->hup(f->arg);
-	if ((revents & POLLIN) && (f->state != FILE_ZOMB))
+		rc = 1;
+	}
+	if ((revents & POLLIN) && (f->state != FILE_ZOMB)) {
 		f->ops->in(f->arg);
-	if ((revents & POLLOUT) && (f->state != FILE_ZOMB))
+		rc = 1;
+	}
+	if ((revents & POLLOUT) && (f->state != FILE_ZOMB)) {
 		f->ops->out(f->arg);
+		rc = 1;
+	}
 #ifdef DEBUG
 	if (log_level >= 3) {
 		clock_gettime(CLOCK_UPTIME, &ts1);
@@ -304,6 +312,7 @@ file_process(struct file *f, struct pollfd *pfd)
 		}
 	}
 #endif
+	return rc;
 }
 
 int
@@ -370,11 +379,19 @@ file_poll(void)
 	/*
 	 * process files that do not rely on poll
 	 */
+	res = 0;
 	for (f = file_list; f != NULL; f = f->next) {
 		if (f->nfds > 0)
 			continue;
-		file_process(f, NULL);
+		res |= file_process(f, NULL);
 	}
+	/*
+	 * The processing may have changed the poll(2) conditions of
+	 * other files, so restart the loop to force their poll(2) event
+	 * masks to be reevaluated.
+	 */
+	if (res)
+		return 1;
 
 	/*
 	 * Sleep. Calculate the number of milliseconds poll(2) must
@@ -395,7 +412,7 @@ file_poll(void)
 		timo = -1;
 	log_flush();
 	res = poll(pfds, nfds, timo);
-	if (res < 0) {
+	if (res == -1) {
 		if (errno != EINTR) {
 			log_puts("poll failed");
 			panic();
@@ -441,7 +458,7 @@ filelist_init(void)
 {
 	sigset_t set;
 
-	if (clock_gettime(CLOCK_UPTIME, &file_ts) < 0) {
+	if (clock_gettime(CLOCK_UPTIME, &file_ts) == -1) {
 		log_puts("filelist_init: CLOCK_UPTIME unsupported\n");
 		panic();
 	}

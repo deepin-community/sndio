@@ -33,7 +33,7 @@ struct sio_hdl {
 	unsigned mode;			/* SIO_PLAY | SIO_REC */
 	int started;			/* true if started */
 	int nbio;			/* true if non-blocking io */
-	int eof;			/* true if error occured */
+	int eof;			/* true if error occurred */
 	int rdrop;			/* recorded bytes to drop */
 	int wsil;			/* silence to play */
 	int rused;			/* bytes used in read buffer */
@@ -58,6 +58,7 @@ struct sio_ops {
 	size_t (*read)(struct sio_hdl *, void *, size_t);
 	int (*start)(struct sio_hdl *);
 	int (*stop)(struct sio_hdl *);
+	int (*flush)(struct sio_hdl *);
 	int (*nfds)(struct sio_hdl *);
 	int (*pollfd)(struct sio_hdl *, struct pollfd *, int);
 	int (*revents)(struct sio_hdl *, struct pollfd *);
@@ -76,7 +77,6 @@ struct sio_hdl *_sio_oss_open(const char *, unsigned, int);
 struct sio_hdl *_sio_alsa_open(const char *, unsigned, int);
 #endif
 void _sio_create(struct sio_hdl *, struct sio_ops *, unsigned, int);
-void _sio_destroy(struct sio_hdl *);
 void _sio_onmove_cb(struct sio_hdl *, int);
 void _sio_onvol_cb(struct sio_hdl *, unsigned);
 #ifdef DEBUG

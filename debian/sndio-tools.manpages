@@ -1,2 +1,3 @@
-aucat/aucat.1
-midicat/midicat.1
+/usr/share/man/man1/aucat.1
+/usr/share/man/man1/midicat.1
+/usr/share/man/man1/sndioctl.1

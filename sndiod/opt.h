@@ -17,11 +17,38 @@
 #ifndef OPT_H
 #define OPT_H
 
+#define OPT_NMAX		16
+
 struct dev;
+
+struct opt {
+	struct opt *next;
+	struct dev *dev, *alt_first;
+	struct midi *midi;
+	struct mtc *mtc;	/* if set, MMC-controlled MTC source */
+
+	int num;
+#define OPT_NAMEMAX 11
+	char name[OPT_NAMEMAX + 1];
+	int maxweight;		/* max dynamic range for clients */
+	int pmin, pmax;		/* play channels */
+	int rmin, rmax;		/* recording channels */
+	int dup;		/* true if join/expand enabled */
+	int mode;		/* bitmap of MODE_XXX */
+	int refcnt;
+};
+
+extern struct opt *opt_list;
 
 struct opt *opt_new(struct dev *, char *, int, int, int, int,
     int, int, int, unsigned int);
-void opt_del(struct dev *, struct opt *);
-struct opt *opt_byname(struct dev *, char *);
+void opt_del(struct opt *);
+struct opt *opt_byname(char *);
+struct opt *opt_bynum(int);
+void opt_init(struct opt *);
+void opt_done(struct opt *);
+int opt_setdev(struct opt *, struct dev *);
+struct dev *opt_ref(struct opt *);
+void opt_unref(struct opt *);
 
 #endif /* !defined(OPT_H) */

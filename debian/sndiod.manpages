@@ -1,2 +1,2 @@
-libsndio/sndio.7
-sndiod/sndiod.8
+usr/share/man/man7/sndio.7
+usr/share/man/man8/sndiod.8

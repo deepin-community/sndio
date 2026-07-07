@@ -1,3 +1,4 @@
+/*	$OpenBSD$	*/
 /*
  * Copyright (c) 2015 Alexandre Ratchov <alex@caoua.org>
  *
@@ -21,59 +22,22 @@
 #include <string.h>
 #include "bsd-compat.h"
 
-#define MIDI_BUFSZ	1024
-
-char usagestr[] = "usage: midicat [-d] [-i in-file] [-o out-file] "
-	"[-q in-port] [-q out-port]\n";
-
-char *port0, *port1, *ifile, *ofile;
-struct mio_hdl *ih, *oh;
-unsigned char buf[MIDI_BUFSZ];
-int buf_used = 0;
-int ifd = -1, ofd = -1;
-int dump;
-
-static int
-midi_flush(void)
-{
-	int i, n, sep;
-
-	if (buf_used == 0)
-		return 1;
-
-	if (ofile != NULL) {
-		n = write(ofd, buf, buf_used);
-		if (n != buf_used) {
-			fprintf(stderr, "%s: short write\n", ofile);
-			buf_used = 0;
-			return 0;
-		}
-	} else {
-		n = mio_write(oh, buf, buf_used);
-		if (n != buf_used) {
-			fprintf(stderr, "%s: port disconnected\n",
-			   ih == oh ? port0 : port1);
-			buf_used = 0;
-			return 0;
-		}
-	}
-
-	if (dump) {
-		for (i = 0; i < buf_used; i++) {
-			sep = (i % 16 == 15 || i == buf_used - 1) ?
-			    '\n' : ' ';
-			fprintf(stderr, "%02x%c", buf[i], sep);
-		}
-	}
-
-	buf_used = 0;
-	return 1;
-}
+void usage(void);
 
 int
 main(int argc, char **argv)
 {
-	int c, mode;
+#define MIDI_BUFSZ	1024
+	unsigned char buf[MIDI_BUFSZ];
+	struct mio_hdl *ih, *oh;
+	char *port0, *port1, *ifile, *ofile;
+	int ifd, ofd;
+	int dump, c, i, len, n, sep, mode;
+
+	dump = 0;
+	port0 = port1 = ifile = ofile = NULL;
+	ih = oh = NULL;
+	ifd = ofd = -1;
 
 	while ((c = getopt(argc, argv, "di:o:q:")) != -1) {
 		switch (c) {
@@ -97,16 +61,14 @@ main(int argc, char **argv)
 			ofile = optarg;
 			break;
 		default:
-			goto bad_usage;
+			usage();
 		}
 	}
 	argc -= optind;
 	argv += optind;
-	if (argc != 0) {
-	bad_usage:
-		fputs(usagestr, stderr);
-		return 1;
-	}
+
+	if (argc != 0)
+		usage();
 
 	/* we don't support more than one data flow */
 	if (ifile != NULL && ofile != NULL) {
@@ -122,7 +84,7 @@ main(int argc, char **argv)
 
 	/* if there're neither files nor ports, then we've nothing to do */
 	if (port0 == NULL && ifile == NULL && ofile == NULL)
-		goto bad_usage;
+		usage();
 
 	/* if no port specified, use default one */
 	if (port0 == NULL)
@@ -130,21 +92,23 @@ main(int argc, char **argv)
 
 	/* open input or output file (if any) */
 	if (ifile) {
-		if (strcmp(ifile, "-") == 0)
+		if (strcmp(ifile, "-") == 0) {
+			ifile = "stdin";
 			ifd = STDIN_FILENO;
-		else {
-			ifd = open(ifile, O_RDONLY, 0);
-			if (ifd < 0) {
+		} else {
+			ifd = open(ifile, O_RDONLY);
+			if (ifd == -1) {
 				perror(ifile);
 				return 1;
 			}
 		}
 	} else if (ofile) {
-		if (strcmp(ofile, "-") == 0)
+		if (strcmp(ofile, "-") == 0) {
+			ofile = "stdout";
 			ofd = STDOUT_FILENO;
-		else {
+		} else {
 			ofd = open(ofile, O_WRONLY | O_CREAT | O_TRUNC, 0666);
-			if (ofd < 0) {
+			if (ofd == -1) {
 				perror(ofile);
 				return 1;
 			}
@@ -180,23 +144,39 @@ main(int argc, char **argv)
 	/* transfer until end-of-file or error */
 	for (;;) {
 		if (ifile != NULL) {
-			buf_used = read(ifd, buf, sizeof(buf));
-			if (buf_used < 0) {
+			len = read(ifd, buf, sizeof(buf));
+			if (len == 0)
+				break;
+			if (len == -1) {
 				perror("stdin");
 				break;
 			}
-			if (buf_used == 0)
-				break;
-			if (!midi_flush())
-				break;
 		} else {
-			buf_used = mio_read(ih, buf, sizeof(buf));
-			if (buf_used == 0) {
+			len = mio_read(ih, buf, sizeof(buf));
+			if (len == 0) {
 				fprintf(stderr, "%s: disconnected\n", port0);
 				break;
 			}
-			if (!midi_flush())
+		}
+		if (ofile != NULL) {
+			n = write(ofd, buf, len);
+			if (n != len) {
+				fprintf(stderr, "%s: short write\n", ofile);
 				break;
+			}
+		} else {
+			n = mio_write(oh, buf, len);
+			if (n != len) {
+				fprintf(stderr, "%s: disconnected\n", port1);
+				break;
+			}
+		}
+		if (dump) {
+			for (i = 0; i < len; i++) {
+				sep = (i % 16 == 15 || i == len - 1) ?
+				    '\n' : ' ';
+				fprintf(stderr, "%02x%c", buf[i], sep);
+			}
 		}
 	}
 
@@ -210,4 +190,12 @@ main(int argc, char **argv)
 	if (ofile)
 		close(ofd);
 	return 0;
+}
+
+void
+usage(void)
+{
+	fprintf(stderr, "usage: midicat [-d] [-i in-file] [-o out-file] "
+	    "[-q in-port] [-q out-port]\n");
+	exit(1);
 }

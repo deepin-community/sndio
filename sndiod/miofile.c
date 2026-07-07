@@ -50,7 +50,7 @@ port_mio_open(struct port *p)
 	p->mio.hdl = mio_open(p->path, p->midi->mode, 1);
 	if (p->mio.hdl == NULL)
 		return 0;
-	p->mio.file = file_new(&port_mio_ops, p, p->path, mio_nfds(p->mio.hdl));
+	p->mio.file = file_new(&port_mio_ops, p, "port", mio_nfds(p->mio.hdl));
 	return 1;
 }
 
@@ -128,5 +128,8 @@ port_mio_hup(void *arg)
 {
 	struct port *p = arg;
 
-	port_close(p);
+	port_migrate(p);
+	midi_abort(p->midi);
+	if (p->state != PORT_CFG)
+		port_close(p);
 }

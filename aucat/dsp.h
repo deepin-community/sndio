@@ -25,74 +25,43 @@
  * boundary is excluded. We represent them as signed fixed point numbers
  * of ADATA_BITS. We also assume that 2^(ADATA_BITS - 1) fits in a int.
  */
-#ifndef ADATA_BITS
-#define ADATA_BITS			16
-#endif
+#define ADATA_BITS			24
 #define ADATA_LE			(BYTE_ORDER == LITTLE_ENDIAN)
 #define ADATA_UNIT			(1 << (ADATA_BITS - 1))
 
-#if ADATA_BITS == 16
-
-#define ADATA_MUL(x,y)		(((int)(x) * (int)(y)) >> (ADATA_BITS - 1))
-#define ADATA_MULDIV(x,y,z)	((int)(x) * (int)(y) / (int)(z))
-
-typedef short adata_t;
-
-#elif ADATA_BITS == 24
-
-#if defined(__i386__) && defined(__GNUC__)
-
-static inline int
-fp24_mul(int x, int a)
-{
-	int res;
-
-	asm volatile (
-		"imull	%2\n\t"
-		"shrdl $23, %%edx, %%eax\n\t"
-		: "=a" (res)
-		: "a" (x), "r" (a)
-		: "%edx"
-		);
-	return res;
-}
-
-static inline int
-fp24_muldiv(int x, int a, int b)
-{
-	int res;
-
-	asm volatile (
-		"imull %2\n\t"
-		"idivl %3\n\t"
-		: "=a" (res)
-		: "a" (x), "d" (a), "r" (b)
-		);
-	return res;
-}
-
-#define ADATA_MUL(x,y)		fp24_mul(x, y)
-#define ADATA_MULDIV(x,y,z)	fp24_muldiv(x, y, z);
-
-#elif defined(__amd64__) || defined(__sparc64__)
-
 #define ADATA_MUL(x,y)		\
 	((int)(((long long)(x) * (long long)(y)) >> (ADATA_BITS - 1)))
-#define ADATA_MULDIV(x,y,z)	\
-	((int)((long long)(x) * (long long)(y) / (long long)(z)))
-
-#else
-#error "no 24-bit code for this architecture"
-#endif
 
 typedef int adata_t;
 
-#else
-#error "only 16-bit and 24-bit precisions are supported"
-#endif
+/*
+ * The FIR is sampled and stored in a table of fixed-point numbers
+ * with 23 fractional bits. For convenience, we use the same fixed-point
+ * numbers to represent time and to walk through the table.
+ */
+#define RESAMP_BITS		23
+#define RESAMP_UNIT		(1 << RESAMP_BITS)
 
 /*
- * Maximum size of the encording string (the longest possible
+ * Filter window length (the time unit is RESAMP_UNIT)
+ */
+#define RESAMP_LENGTH		(8 * RESAMP_UNIT)
+
+/*
+ * Time between samples of the FIR (the time unit is RESAMP_UNIT)
+ */
+#define RESAMP_STEP_BITS	(RESAMP_BITS - 6)
+#define RESAMP_STEP		(1 << RESAMP_STEP_BITS)
+
+/*
+ * Maximum downsample/upsample ratio we support, must be a power of two.
+ * The ratio between the max and the min sample rates is 192kHz / 4kHz = 48,
+ * so we can use 64
+ */
+#define RESAMP_RATIO		64
+
+/*
+ * Maximum size of the encoding string (the longest possible
  * encoding is ``s24le3msb'').
  */
 #define ENCMAX	10
@@ -105,15 +74,16 @@ typedef int adata_t;
 struct aparams {
 	unsigned int bps;		/* bytes per sample */
 	unsigned int bits;		/* actually used bits */
-	unsigned int le;		/* 1 if little endian, 0 if big endian */
+	unsigned int le;		/* 1 if little endian, else be */
 	unsigned int sig;		/* 1 if signed, 0 if unsigned */
-	unsigned int msb;		/* 1 if msb justified, 0 if lsb justified */
+	unsigned int msb;		/* 1 if msb justified, else lsb */
 };
 
 struct resamp {
-#define RESAMP_NCTX	2
+#define RESAMP_NCTX	(RESAMP_LENGTH / RESAMP_UNIT * RESAMP_RATIO)
 	unsigned int ctx_start;
 	adata_t ctx[NCHAN_MAX * RESAMP_NCTX];
+	int filt_cutoff, filt_step;
 	unsigned int iblksz, oblksz;
 	int diff;
 	int nch;
@@ -123,7 +93,7 @@ struct conv {
 	int bfirst;			/* bytes to skip at startup */
 	unsigned int bps;		/* bytes per sample */
 	unsigned int shift;		/* shift to get 32bit MSB */
-	unsigned int bias;			/* bias of unsigned samples */
+	unsigned int bias;		/* bias of unsigned samples */
 	int bnext;			/* to reach the next byte */
 	int snext;			/* to reach the next sample */
 	int nch;
@@ -137,8 +107,8 @@ struct cmap {
 	int nch;
 };
 
-#define MIDI_TO_ADATA(m)	(aparams_ctltovol[m] << (ADATA_BITS - 16))
-extern int aparams_ctltovol[128];
+#define MIDI_TO_ADATA(m)	(aparams_ctltovol[m])
+extern const int aparams_ctltovol[128];
 
 void aparams_init(struct aparams *);
 void aparams_log(struct aparams *);

@@ -1,2 +1,3 @@
 usr/lib/*/libsndio.so
+usr/lib/*/pkgconfig
 usr/include/sndio.h

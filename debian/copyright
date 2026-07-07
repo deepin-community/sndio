@@ -1,9 +1,9 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: sndio
-Source: http://www.sndio.org/
+Source: https://www.sndio.org/
 
 Files: *
-Copyright: 2003-2015 Alexandre Ratchov <alex@caoua.org>
+Copyright: 2003-2020 Alexandre Ratchov <alex@caoua.org>
            2010 Jacob Meuser <jakemsr@sdf.lonestar.org>
 License: ISC
 
@@ -35,6 +35,7 @@ License: ISC
 
 Files: debian/*
 Copyright: 2015 Peter Piwowarski <peterjpiwowarski@gmail.com>
+           2022-2024 Gianfranco Costamagna <locutusofborg@debian.org>
 License: ISC-packaging
  Permission to use, copy, modify, and/or distribute this package for any purpose
  with or without fee is hereby granted, provided that the above copyright notice

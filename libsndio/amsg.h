@@ -43,6 +43,18 @@
 #define AUCAT_PORT		11025
 
 /*
+ * limits
+ */
+#define AMSG_CTL_NAMEMAX	16	/* max name length */
+#define AMSG_CTL_DISPLAYMAX	32	/* max display string length */
+
+/*
+ * Size of the struct amsg_ctl_desc expected by clients
+ * using the AMSG_CTLSUB_OLD request
+ */
+#define AMSG_OLD_DESC_SIZE	92
+
+/*
  * WARNING: since the protocol may be simultaneously used by static
  * binaries or by different versions of a shared library, we are not
  * allowed to change the packet binary representation in a backward
@@ -64,6 +76,10 @@ struct amsg {
 #define AMSG_HELLO	10	/* say hello, check versions and so ... */
 #define AMSG_BYE	11	/* ask server to drop connection */
 #define AMSG_AUTH	12	/* send authentication cookie */
+#define AMSG_CTLSUB_OLD	13	/* amsg_ctl_desc with no "display" attribute */
+#define AMSG_CTLSET	14	/* set control value */
+#define AMSG_CTLSYNC	15	/* end of controls descriptions */
+#define AMSG_CTLSUB	16	/* ondesc/onctl subscription */
 	uint32_t cmd;
 	uint32_t __pad;
 	union {
@@ -88,6 +104,9 @@ struct amsg {
 #define AMSG_DATAMAX	0x1000
 			uint32_t size;
 		} data;
+		struct amsg_stop {
+			uint8_t drain;
+		} stop;
 		struct amsg_ts {
 			int32_t delta;
 		} ts;
@@ -98,8 +117,9 @@ struct amsg {
 			uint16_t mode;		/* bitmap of MODE_XXX */
 #define AMSG_VERSION	7
 			uint8_t version;	/* protocol version */
+#define AMSG_NODEV	255
 			uint8_t devnum;		/* device number */
-			uint32_t _reserved[1];	/* for future use */
+			uint32_t id;		/* client id */
 #define AMSG_OPTMAX	12
 			char opt[AMSG_OPTMAX];	/* profile name */
 			char who[12];		/* hint for leases */
@@ -108,7 +128,39 @@ struct amsg {
 #define AMSG_COOKIELEN	16
 			uint8_t cookie[AMSG_COOKIELEN];
 		} auth;
+		struct amsg_ctlsub {
+			uint8_t desc, val;
+		} ctlsub;
+		struct amsg_ctlset {
+			uint16_t addr, val;
+		} ctlset;
 	} u;
+};
+
+/*
+ * network representation of sioctl_node structure
+ */
+struct amsg_ctl_node {
+	char name[AMSG_CTL_NAMEMAX];
+	int16_t unit;
+	uint8_t __pad[2];
+};
+
+/*
+ * network representation of sioctl_desc structure
+ */
+struct amsg_ctl_desc {
+	struct amsg_ctl_node node0;	/* affected channels */
+	struct amsg_ctl_node node1;	/* dito for AMSG_CTL_{SEL,VEC,LIST} */
+	char func[AMSG_CTL_NAMEMAX];	/* parameter function name */
+	char group[AMSG_CTL_NAMEMAX];	/* group of the control */
+	uint8_t type;			/* see sioctl_desc structure */
+	uint8_t __pad1[1];
+	uint16_t addr;			/* control address */
+	uint16_t maxval;
+	uint16_t curval;
+	uint32_t __pad2[4];
+	char display[AMSG_CTL_DISPLAYMAX];	/* free-format hint */
 };
 
 /*

@@ -14,30 +14,46 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+#include <string.h>
 #include "dsp.h"
 #include "utils.h"
 
-int aparams_ctltovol[128] = {
-	    0,
-	  256,	  266,	  276,	  287,	  299,	  310,	  323,	  335,
-	  348,	  362,	  376,	  391,	  406,	  422,	  439,	  456,
-	  474,	  493,	  512,	  532,	  553,	  575,	  597,	  621,
-	  645,	  670,	  697,	  724,	  753,	  782,	  813,	  845,
-	  878,	  912,	  948,	  985,	 1024,	 1064,	 1106,	 1149,
-	 1195,	 1241,	 1290,	 1341,	 1393,	 1448,	 1505,	 1564,
-	 1625,	 1689,	 1756,	 1825,	 1896,	 1971,	 2048,	 2128,
-	 2212,	 2299,	 2389,	 2483,	 2580,	 2682,	 2787,	 2896,
-	 3010,	 3128,	 3251,	 3379,	 3511,	 3649,	 3792,	 3941,
-	 4096,	 4257,	 4424,	 4598,	 4778,	 4966,	 5161,	 5363,
-	 5574,	 5793,	 6020,	 6256,	 6502,	 6757,	 7023,	 7298,
-	 7585,	 7883,	 8192,	 8514,	 8848,	 9195,	 9556,	 9931,
-	10321,	10726,	11148,	11585,	12040,	12513,	13004,	13515,
-	14045,	14596,	15170,	15765,	16384,	17027,	17696,	18390,
-	19112,	19863,	20643,	21453,	22295,	23170,	24080,	25025,
-	26008,	27029,	28090,	29193,	30339,	31530,	32768
+const int aparams_ctltovol[128] = {
+	        0,     65536,     68109,     70783,
+	    73562,     76450,     79451,     82570,
+	    85812,     89181,     92682,     96321,
+	   100102,    104032,    108116,    112361,
+	   116772,    121356,    126121,    131072,
+	   136218,    141566,    147123,    152899,
+	   158902,    165140,    171624,    178361,
+	   185364,    192641,    200204,    208064,
+	   216232,    224721,    233544,    242713,
+	   252241,    262144,    272436,    283131,
+	   294247,    305799,    317804,    330281,
+	   343247,    356723,    370728,    385282,
+	   400408,    416128,    432465,    449443,
+	   467088,    485425,    504482,    524288,
+	   544871,    566262,    588493,    611597,
+	   635608,    660561,    686495,    713446,
+	   741455,    770564,    800816,    832255,
+	   864929,    898885,    934175,    970850,
+	  1008965,   1048576,   1089742,   1132525,
+	  1176987,   1223194,   1271216,   1321123,
+	  1372989,   1426892,   1482910,   1541128,
+	  1601632,   1664511,   1729858,   1797771,
+	  1868350,   1941700,   2017930,   2097152,
+	  2179485,   2265049,   2353974,   2446389,
+	  2542432,   2642246,   2745978,   2853783,
+	  2965821,   3082257,   3203264,   3329021,
+	  3459716,   3595542,   3736700,   3883400,
+	  4035859,   4194304,   4358969,   4530099,
+	  4707947,   4892777,   5084864,   5284492,
+	  5491957,   5707567,   5931642,   6164513,
+	  6406527,   6658043,   6919432,   7191084,
+	  7473400,   7766800,   8071719,   8388608
 };
 
-short dec_ulawmap[256] = {
+const short dec_ulawmap[256] = {
 	-32124, -31100, -30076, -29052, -28028, -27004, -25980, -24956,
 	-23932, -22908, -21884, -20860, -19836, -18812, -17788, -16764,
 	-15996, -15484, -14972, -14460, -13948, -13436, -12924, -12412,
@@ -72,7 +88,7 @@ short dec_ulawmap[256] = {
 	    56,     48,     40,     32,     24,     16,      8,      0
 };
 
-short dec_alawmap[256] = {
+const short dec_alawmap[256] = {
 	 -5504,  -5248,  -6016,  -5760,  -4480,  -4224,  -4992,  -4736,
 	 -7552,  -7296,  -8064,  -7808,  -6528,  -6272,  -7040,  -6784,
 	 -2752,  -2624,  -3008,  -2880,  -2240,  -2112,  -2496,  -2368,
@@ -106,6 +122,75 @@ short dec_alawmap[256] = {
 	   688,    656,    752,    720,    560,    528,    624,    592,
 	   944,    912,   1008,    976,    816,    784,    880,    848
 };
+
+const int resamp_filt[RESAMP_LENGTH / RESAMP_STEP + 1] = {
+	      0,       0,       3,       9,      22,      42,      73,     116,
+	    174,     248,     341,     454,     589,     749,     934,    1148,
+	   1392,    1666,    1974,    2316,    2693,    3107,    3560,    4051,
+	   4582,    5154,    5766,    6420,    7116,    7853,    8632,    9451,
+	  10311,   11210,   12148,   13123,   14133,   15178,   16253,   17359,
+	  18491,   19647,   20824,   22018,   23226,   24443,   25665,   26888,
+	  28106,   29315,   30509,   31681,   32826,   33938,   35009,   36033,
+	  37001,   37908,   38744,   39502,   40174,   40750,   41223,   41582,
+	  41819,   41925,   41890,   41704,   41358,   40842,   40147,   39261,
+	  38176,   36881,   35366,   33623,   31641,   29411,   26923,   24169,
+	  21140,   17827,   14222,   10317,    6105,    1580,   -3267,   -8440,
+	 -13944,  -19785,  -25967,  -32492,  -39364,  -46584,  -54153,  -62072,
+	 -70339,  -78953,  -87911,  -97209, -106843, -116806, -127092, -137692,
+	-148596, -159795, -171276, -183025, -195029, -207271, -219735, -232401,
+	-245249, -258259, -271407, -284670, -298021, -311434, -324880, -338329,
+	-351750, -365111, -378378, -391515, -404485, -417252, -429775, -442015,
+	-453930, -465477, -476613, -487294, -497472, -507102, -516137, -524527,
+	-532225, -539181, -545344, -550664, -555090, -558571, -561055, -562490,
+	-562826, -562010, -559990, -556717, -552139, -546205, -538866, -530074,
+	-519779, -507936, -494496, -479416, -462652, -444160, -423901, -401835,
+	-377923, -352132, -324425, -294772, -263143, -229509, -193847, -156134,
+	-116348,  -74474,  -30494,   15601,   63822,  114174,  166661,  221283,
+	 278037,  336916,  397911,  461009,  526194,  593446,  662741,  734054,
+	 807354,  882608,  959779, 1038826, 1119706, 1202370, 1286768, 1372846,
+	1460546, 1549808, 1640566, 1732753, 1826299, 1921130, 2017169, 2114336,
+	2212550, 2311723, 2411770, 2512598, 2614116, 2716228, 2818836, 2921841,
+	3025142, 3128636, 3232218, 3335782, 3439219, 3542423, 3645282, 3747687,
+	3849526, 3950687, 4051059, 4150530, 4248987, 4346320, 4442415, 4537163,
+	4630453, 4722177, 4812225, 4900493, 4986873, 5071263, 5153561, 5233668,
+	5311485, 5386917, 5459872, 5530259, 5597992, 5662986, 5725160, 5784436,
+	5840739, 5893999, 5944148, 5991122, 6034862, 6075313, 6112422, 6146142,
+	6176430, 6203247, 6226559, 6246335, 6262551, 6275185, 6284220, 6289647,
+	6291456, 6289647, 6284220, 6275185, 6262551, 6246335, 6226559, 6203247,
+	6176430, 6146142, 6112422, 6075313, 6034862, 5991122, 5944148, 5893999,
+	5840739, 5784436, 5725160, 5662986, 5597992, 5530259, 5459872, 5386917,
+	5311485, 5233668, 5153561, 5071263, 4986873, 4900493, 4812225, 4722177,
+	4630453, 4537163, 4442415, 4346320, 4248987, 4150530, 4051059, 3950687,
+	3849526, 3747687, 3645282, 3542423, 3439219, 3335782, 3232218, 3128636,
+	3025142, 2921841, 2818836, 2716228, 2614116, 2512598, 2411770, 2311723,
+	2212550, 2114336, 2017169, 1921130, 1826299, 1732753, 1640566, 1549808,
+	1460546, 1372846, 1286768, 1202370, 1119706, 1038826,  959779,  882608,
+	 807354,  734054,  662741,  593446,  526194,  461009,  397911,  336916,
+	 278037,  221283,  166661,  114174,   63822,   15601,  -30494,  -74474,
+	-116348, -156134, -193847, -229509, -263143, -294772, -324425, -352132,
+	-377923, -401835, -423901, -444160, -462652, -479416, -494496, -507936,
+	-519779, -530074, -538866, -546205, -552139, -556717, -559990, -562010,
+	-562826, -562490, -561055, -558571, -555090, -550664, -545344, -539181,
+	-532225, -524527, -516137, -507102, -497472, -487294, -476613, -465477,
+	-453930, -442015, -429775, -417252, -404485, -391515, -378378, -365111,
+	-351750, -338329, -324880, -311434, -298021, -284670, -271407, -258259,
+	-245249, -232401, -219735, -207271, -195029, -183025, -171276, -159795,
+	-148596, -137692, -127092, -116806, -106843,  -97209,  -87911,  -78953,
+	 -70339,  -62072,  -54153,  -46584,  -39364,  -32492,  -25967,  -19785,
+	 -13944,   -8440,   -3267,    1580,    6105,   10317,   14222,   17827,
+	  21140,   24169,   26923,   29411,   31641,   33623,   35366,   36881,
+	  38176,   39261,   40147,   40842,   41358,   41704,   41890,   41925,
+	  41819,   41582,   41223,   40750,   40174,   39502,   38744,   37908,
+	  37001,   36033,   35009,   33938,   32826,   31681,   30509,   29315,
+	  28106,   26888,   25665,   24443,   23226,   22018,   20824,   19647,
+	  18491,   17359,   16253,   15178,   14133,   13123,   12148,   11210,
+	  10311,    9451,    8632,    7853,    7116,    6420,    5766,    5154,
+	   4582,    4051,    3560,    3107,    2693,    2316,    1974,    1666,
+	   1392,    1148,     934,     749,     589,     454,     341,     248,
+	    174,     116,      73,      42,      22,       9,       3,       0,
+	      0
+};
+
 
 /*
  * Generate a string corresponding to the encoding in par,
@@ -261,7 +346,9 @@ aparams_log(struct aparams *par)
 int
 aparams_native(struct aparams *par)
 {
-	return par->bps == sizeof(adata_t) && par->bits == ADATA_BITS &&
+	return par->sig &&
+	    par->bps == sizeof(adata_t) &&
+	    par->bits == ADATA_BITS &&
 	    (par->bps == 1 || par->le == ADATA_LE) &&
 	    (par->bits == par->bps * 8 || !par->msb);
 }
@@ -287,7 +374,7 @@ resamp_getcnt(struct resamp *p, int *icnt, int *ocnt)
 
 /*
  * Resample the given number of frames. The number of output frames
- * must match the coresponding number of input frames. Either always
+ * must match the corresponding number of input frames. Either always
  * use icnt and ocnt such that:
  *
  *	 icnt * oblksz = ocnt * iblksz
@@ -306,8 +393,10 @@ resamp_do(struct resamp *p, adata_t *in, adata_t *out, int icnt, int ocnt)
 	unsigned int iblksz;
 	unsigned int ofr;
 	unsigned int c;
+	int64_t f[NCHAN_MAX];
 	adata_t *ctxbuf, *ctx;
 	unsigned int ctx_start;
+	int q, qi, qf, n;
 
 	/*
 	 * Partially copy structures into local variables, to avoid
@@ -343,7 +432,7 @@ resamp_do(struct resamp *p, adata_t *in, adata_t *out, int icnt, int ocnt)
 		if (diff >= oblksz) {
 			if (ifr == 0)
 				break;
-			ctx_start ^= 1;
+			ctx_start = (ctx_start - 1) & (RESAMP_NCTX - 1);
 			ctx = ctxbuf + ctx_start;
 			for (c = nch; c > 0; c--) {
 				*ctx = *idata++;
@@ -354,13 +443,48 @@ resamp_do(struct resamp *p, adata_t *in, adata_t *out, int icnt, int ocnt)
 		} else {
 			if (ofr == 0)
 				break;
-			ctx = ctxbuf;
-			for (c = nch; c > 0; c--) {
-				s = ctx[ctx_start ^ 1];
-				ds = ctx[ctx_start] - s;
-				ctx += RESAMP_NCTX;
-				*odata++ = s + ADATA_MULDIV(ds, diff, oblksz);
+
+			for (c = 0; c < nch; c++)
+				f[c] = 0;
+
+			q = diff * p->filt_step;
+			n = ctx_start;
+
+			while (q < RESAMP_LENGTH) {
+				qi = q >> RESAMP_STEP_BITS;
+				qf = q & (RESAMP_STEP - 1);
+				s = resamp_filt[qi];
+				ds = resamp_filt[qi + 1] - s;
+				s += (int64_t)qf * ds >> RESAMP_STEP_BITS;
+				ctx = ctxbuf;
+				for (c = 0; c < nch; c++) {
+					f[c] += (int64_t)ctx[n] * s;
+					ctx += RESAMP_NCTX;
+				}
+				q += p->filt_cutoff;
+				n = (n + 1) & (RESAMP_NCTX - 1);
 			}
+
+			for (c = 0; c < nch; c++) {
+				s = f[c] >> RESAMP_BITS;
+				s = (int64_t)s * p->filt_cutoff >> RESAMP_BITS;
+#if ADATA_BITS == 16
+				/*
+				 * In 16-bit mode, we've no room for filter
+				 * overshoots, so we need to clip the signal
+				 * to avoid 16-bit integers to wrap around.
+				 * In 24-bit mode, samples may exceed the
+				 * [-1:1] range. Later, cmap_add() will clip
+				 * them, so no need to clip them here as well.
+				 */
+				if (s >= ADATA_UNIT)
+					s = ADATA_UNIT - 1;
+				else if (s < -ADATA_UNIT)
+					s = -ADATA_UNIT;
+#endif
+				*odata++ = s;
+			}
+
 			diff += iblksz;
 			ofr--;
 		}
@@ -403,7 +527,7 @@ void
 resamp_init(struct resamp *p, unsigned int iblksz,
     unsigned int oblksz, int nch)
 {
-	unsigned int i, g;
+	unsigned int g;
 
 	/*
 	 * reduce iblksz/oblksz fraction
@@ -425,8 +549,14 @@ resamp_init(struct resamp *p, unsigned int iblksz,
 	p->diff = 0;
 	p->nch = nch;
 	p->ctx_start = 0;
-	for (i = 0; i < NCHAN_MAX * RESAMP_NCTX; i++)
-		p->ctx[i] = 0;
+	memset(p->ctx, 0, sizeof(p->ctx));
+	if (p->iblksz < p->oblksz) {
+		p->filt_cutoff = RESAMP_UNIT;
+		p->filt_step = RESAMP_UNIT / p->oblksz;
+	} else {
+		p->filt_cutoff = (int64_t)RESAMP_UNIT * p->oblksz / p->iblksz;
+		p->filt_step = RESAMP_UNIT / p->iblksz;
+	}
 #ifdef DEBUG
 	if (log_level >= 3) {
 		log_puts("resamp: ");
@@ -660,11 +790,11 @@ f32_to_adata(unsigned int x)
 	 * 31 - (BITS - 1) - (e - 127)
 	 *
 	 * to ensure output is in the 0..(2^BITS)-1 range, the minimum
-	 * shift is 31 - (BITS - 1), and maximum shift is 31
+	 * shift is 31 - (BITS - 1) + 1, and maximum shift is 31
 	 */
 	if (e < 127 - (ADATA_BITS - 1))
 		y = 0;
-	else if (e > 127)
+	else if (e >= 127)
 		y = ADATA_UNIT - 1;
 	else
 		y = m >> (127 + (32 - ADATA_BITS) - e);
@@ -727,7 +857,7 @@ dec_do_ulaw(struct conv *p, unsigned char *in,
 	unsigned int f;
 	unsigned char *idata;
 	adata_t *odata;
-	short *map;
+	const short *map;
 
 #ifdef DEBUG
 	if (log_level >= 4) {
@@ -877,33 +1007,35 @@ cmap_init(struct cmap *p,
     int imin, int imax, int isubmin, int isubmax,
     int omin, int omax, int osubmin, int osubmax)
 {
-	int cmin, cmax;
+	int inch, onch, nch;
 
-	cmin = -NCHAN_MAX;
-	if (osubmin > cmin)
-		cmin = osubmin;
-	if (omin > cmin)
-		cmin = omin;
-	if (isubmin > cmin)
-		cmin = isubmin;
-	if (imin > cmin)
-		cmin = imin;
+	/*
+	 * Ignore channels outside of the available sets
+	 */
+	if (isubmin < imin)
+		isubmin = imin;
+	if (isubmax > imax)
+		isubmax = imax;
+	if (osubmin < omin)
+		osubmin = omin;
+	if (osubmax > omax)
+		osubmax = omax;
 
-	cmax = NCHAN_MAX;
-	if (osubmax < cmax)
-		cmax = osubmax;
-	if (omax < cmax)
-		cmax = omax;
-	if (isubmax < cmax)
-		cmax = isubmax;
-	if (imax < cmax)
-		cmax = imax;
+	/*
+	 * Shrink the input or the output subset to make both subsets of
+	 * the same size
+	 */
+	inch = isubmax - isubmin + 1;
+	onch = osubmax - osubmin + 1;
+	nch = (inch < onch) ? inch : onch;
+	isubmax = isubmin + nch - 1;
+	osubmax = osubmin + nch - 1;
 
-	p->ostart = cmin - omin;
-	p->onext = omax - cmax;
-	p->istart = cmin - imin;
-	p->inext = imax - cmax;
-	p->nch = cmax - cmin + 1;
+	p->ostart = osubmin - omin;
+	p->onext = omax - osubmax;
+	p->istart = isubmin - imin;
+	p->inext = imax - isubmax;
+	p->nch = nch;
 #ifdef DEBUG
 	if (log_level >= 3) {
 		log_puts("cmap: nch = ");

@@ -11,7 +11,7 @@ DEFS = -DDEBUG @defs@
 LDADD = @ldadd@
 
 # extra compiler flags to produce objects for shared library
-SO_CFLAGS = -fPIC
+SO_CFLAGS = @so_cflags@
 
 # extra compiler flags to produce a shared library with the given name
 SO_LDFLAGS = -shared @so_ldflags@
@@ -24,6 +24,7 @@ SO_LDFLAGS = -shared @so_ldflags@
 #
 INCLUDE_DIR = @includedir@
 LIB_DIR = @libdir@
+PKGCONF_DIR = @pkgconfdir@
 MAN3_DIR = @mandir@/man3
 MAN7_DIR = @mandir@/man7
 
@@ -34,6 +35,9 @@ MAN3 = \
 	sio_start.3 sio_stop.3 sio_read.3 sio_write.3 sio_onmove.3 \
 	sio_nfds.3 sio_pollfd.3 sio_revents.3 sio_eof.3 \
 	sio_setvol.3 sio_onvol.3 sio_initpar.3 \
+	sioctl_open.3 \
+	sioctl_close.3 sioctl_setval.3 sioctl_ondesc.3 sioctl_onval.3 \
+	sioctl_nfds.3 sioctl_pollfd.3 sioctl_revents.3 sioctl_eof.3 \
 	mio_open.3 \
 	mio_close.3 mio_read.3 mio_write.3 mio_nfds.3 mio_pollfd.3 \
 	mio_revents.3 mio_eof.3
@@ -43,20 +47,23 @@ MAN7 = sndio.7
 # libraries to build and install
 #
 MAJ = 7
-MIN = 0
+MIN = 3
 SO = @so@
 SO_LINK = @so_link@
+STATIC_LIB = @static_lib@
 
-all:		${SO} ${SO_LINK}
-
+all:		${STATIC_LIB} ${SO}
+		for i in ${SO_LINK}; do ln -sf ${SO} $$i; done
 
 install:
 		mkdir -p ${DESTDIR}${INCLUDE_DIR}
 		mkdir -p ${DESTDIR}${LIB_DIR}
+		mkdir -p ${DESTDIR}${PKGCONF_DIR}
 		mkdir -p ${DESTDIR}${MAN3_DIR}
 		mkdir -p ${DESTDIR}${MAN7_DIR}
 		cp sndio.h ${DESTDIR}${INCLUDE_DIR}
-		cp -R ${SO} ${SO_LINK} ${DESTDIR}${LIB_DIR}
+		cp -R ${STATIC_LIB} ${SO} ${SO_LINK} ${DESTDIR}${LIB_DIR}
+		cp sndio.pc ${DESTDIR}${PKGCONF_DIR}
 		cp sio_open.3 ${DESTDIR}${MAN3_DIR}
 		ln -sf sio_open.3 ${DESTDIR}${MAN3_DIR}/sio_close.3
 		ln -sf sio_open.3 ${DESTDIR}${MAN3_DIR}/sio_setpar.3
@@ -74,6 +81,15 @@ install:
 		ln -sf sio_open.3 ${DESTDIR}${MAN3_DIR}/sio_setvol.3
 		ln -sf sio_open.3 ${DESTDIR}${MAN3_DIR}/sio_onvol.3
 		ln -sf sio_open.3 ${DESTDIR}${MAN3_DIR}/sio_initpar.3
+		cp sioctl_open.3 ${DESTDIR}${MAN3_DIR}
+		ln -sf sioctl_open.3 ${DESTDIR}${MAN3_DIR}/sioctl_close.3
+		ln -sf sioctl_open.3 ${DESTDIR}${MAN3_DIR}/sioctl_setval.3
+		ln -sf sioctl_open.3 ${DESTDIR}${MAN3_DIR}/sioctl_ondesc.3
+		ln -sf sioctl_open.3 ${DESTDIR}${MAN3_DIR}/sioctl_onval.3
+		ln -sf sioctl_open.3 ${DESTDIR}${MAN3_DIR}/sioctl_nfds.3
+		ln -sf sioctl_open.3 ${DESTDIR}${MAN3_DIR}/sioctl_pollfd.3
+		ln -sf sioctl_open.3 ${DESTDIR}${MAN3_DIR}/sioctl_revents.3
+		ln -sf sioctl_open.3 ${DESTDIR}${MAN3_DIR}/sioctl_eof.3
 		cp mio_open.3 ${DESTDIR}${MAN3_DIR}
 		ln -sf mio_open.3 ${DESTDIR}${MAN3_DIR}/mio_close.3
 		ln -sf mio_open.3 ${DESTDIR}${MAN3_DIR}/mio_read.3
@@ -86,12 +102,13 @@ install:
 
 uninstall:
 		rm -f ${DESTDIR}${INCLUDE_DIR}/sndio.h
-		cd ${DESTDIR}${LIB_DIR} && rm -f ${SO} ${SO_LINK}
+		cd ${DESTDIR}${LIB_DIR} && rm -f ${STATIC_LIB} ${SO} ${SO_LINK}
+		cd ${DESTDIR}${PKGCONF_DIR} && rm -f sndio.pc
 		cd ${DESTDIR}${MAN3_DIR} && rm -f ${MAN3}
 		cd ${DESTDIR}${MAN7_DIR} && rm -f ${MAN7}
 
 clean:
-		rm -f -- ${SO} ${SO_LINK} *.o
+		rm -f -- ${STATIC_LIB} ${SO} ${SO_LINK} *.o
 
 # ---------------------------------------------------------- dependencies ---
 
@@ -102,7 +119,8 @@ clean:
 OBJS = debug.o aucat.o \
 mio.o mio_rmidi.o mio_alsa.o mio_aucat.o \
 sio.o sio_alsa.o sio_aucat.o sio_oss.o sio_sun.o \
-issetugid.o strlcat.o strlcpy.o strtonum.o clock_gettime.o
+sioctl.o sioctl_aucat.o sioctl_sun.o \
+getpeereid.o issetugid.o strlcat.o strlcpy.o strtonum.o clock_gettime.o
 
 .c.o:
 		${CC} ${CFLAGS} ${SO_CFLAGS} -I. ${INCLUDE} ${DEFS} -o $@ -c $<
@@ -110,8 +128,11 @@ issetugid.o strlcat.o strlcpy.o strtonum.o clock_gettime.o
 ${SO}:		${OBJS}
 		${CC} ${LDFLAGS} ${SO_CFLAGS} ${SO_LDFLAGS} -o ${SO} ${OBJS} ${LDADD}
 
-${SO_LINK}:
-		ln -sf ${SO} ${SO_LINK}
+libsndio.a:	${OBJS}
+		${AR} rcs libsndio.a ${OBJS}
+
+getpeereid.o:	../bsd-compat/getpeereid.c
+		${CC} ${CFLAGS} ${SO_CFLAGS} ${INCLUDE} ${DEFS} -c -o getpeereid.o ../bsd-compat/getpeereid.c
 
 issetugid.o:	../bsd-compat/issetugid.c
 		${CC} ${CFLAGS} ${SO_CFLAGS} ${INCLUDE} ${DEFS} -c -o issetugid.o ../bsd-compat/issetugid.c
@@ -147,3 +168,6 @@ sio_oss.o:	sio_oss.c debug.h sio_priv.h sndio.h \
 		../bsd-compat/bsd-compat.h
 sio_sun.o:	sio_sun.c debug.h sio_priv.h sndio.h \
 		../bsd-compat/bsd-compat.h
+sioctl.o:	sioctl.c debug.h sioctl_priv.h
+sioctl_aucat.o:	sioctl_aucat.c debug.h aucat.h amsg.h sioctl_priv.h
+sioctl_sun.o:	sioctl_sun.c debug.h amsg.h sioctl_priv.h

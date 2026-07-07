@@ -131,28 +131,28 @@ struct au_hdr {
 	/* followed by optional desc[] continuation */
 };
 
-char wav_id_riff[4] = {'R', 'I', 'F', 'F'};
-char wav_id_wave[4] = {'W', 'A', 'V', 'E'};
-char wav_id_data[4] = {'d', 'a', 't', 'a'};
-char wav_id_fmt[4] = {'f', 'm', 't', ' '};
-char wav_guid[14] = {
+const char wav_id_riff[4] = {'R', 'I', 'F', 'F'};
+const char wav_id_wave[4] = {'W', 'A', 'V', 'E'};
+const char wav_id_data[4] = {'d', 'a', 't', 'a'};
+const char wav_id_fmt[4] = {'f', 'm', 't', ' '};
+const char wav_guid[14] = {
 	0x00, 0x00, 0x00, 0x00,
 	0x10, 0x00, 0x80, 0x00,
 	0x00, 0xAA, 0x00, 0x38,
 	0x9B, 0x71
 };
 
-char aiff_id_form[4] = {'F', 'O', 'R', 'M'};
-char aiff_id_aiff[4] = {'A', 'I', 'F', 'F'};
-char aiff_id_aifc[4] = {'A', 'I', 'F', 'C'};
-char aiff_id_data[4] = {'S', 'S', 'N', 'D'};
-char aiff_id_comm[4] = {'C', 'O', 'M', 'M'};
-char aiff_id_none[4] = {'N', 'O', 'N', 'E'};
-char aiff_id_fl32[4] = {'f', 'l', '3', '2'};
-char aiff_id_ulaw[4] = {'u', 'l', 'a', 'w'};
-char aiff_id_alaw[4] = {'a', 'l', 'a', 'w'};
+const char aiff_id_form[4] = {'F', 'O', 'R', 'M'};
+const char aiff_id_aiff[4] = {'A', 'I', 'F', 'F'};
+const char aiff_id_aifc[4] = {'A', 'I', 'F', 'C'};
+const char aiff_id_data[4] = {'S', 'S', 'N', 'D'};
+const char aiff_id_comm[4] = {'C', 'O', 'M', 'M'};
+const char aiff_id_none[4] = {'N', 'O', 'N', 'E'};
+const char aiff_id_fl32[4] = {'f', 'l', '3', '2'};
+const char aiff_id_ulaw[4] = {'u', 'l', 'a', 'w'};
+const char aiff_id_alaw[4] = {'a', 'l', 'a', 'w'};
 
-char au_id[4] = {'.', 's', 'n', 'd'};
+const char au_id[4] = {'.', 's', 'n', 'd'};
 
 static inline unsigned int
 le16_get(le16_t *p)
@@ -219,7 +219,7 @@ be32_set(be32_t *p, unsigned int v)
 static int
 afile_readhdr(struct afile *f, void *addr, size_t size)
 {
-	if (lseek(f->fd, 0, SEEK_SET) < 0) {
+	if (lseek(f->fd, 0, SEEK_SET) == -1) {
 		log_puts(f->path);
 		log_puts(": failed to seek to beginning of file\n");
 		return 0;
@@ -235,7 +235,7 @@ afile_readhdr(struct afile *f, void *addr, size_t size)
 static int
 afile_writehdr(struct afile *f, void *addr, size_t size)
 {
-	if (lseek(f->fd, 0, SEEK_SET) < 0) {
+	if (lseek(f->fd, 0, SEEK_SET) == -1) {
 		log_puts(f->path);
 		log_puts(": failed to seek back to header\n");
 		return 0;
@@ -365,7 +365,7 @@ afile_wav_readhdr(struct afile *f)
 	if (!afile_readhdr(f, &riff, sizeof(struct wav_riff)))
 		return 0;
 	if (memcmp(&riff.id, &wav_id_riff, 4) != 0 ||
-	    memcmp(&riff.type, &wav_id_wave, 4)) {
+	    memcmp(&riff.type, &wav_id_wave, 4) != 0) {
 		log_puts(f->path);
 		log_puts(": not a .wav file\n");
 		return 0;
@@ -404,9 +404,9 @@ afile_wav_readhdr(struct afile *f)
 		 * next chunk
 		 */
 		pos += sizeof(struct wav_chunk) + csize;
-		if (lseek(f->fd, sizeof(riff) + pos, SEEK_SET) < 0) {
+		if (lseek(f->fd, sizeof(riff) + pos, SEEK_SET) == -1) {
 			log_puts(f->path);
-			log_puts(": filed to seek to chunk\n");
+			log_puts(": failed to seek to chunk\n");
 			return 0;
 		}
 	}
@@ -432,12 +432,17 @@ afile_wav_writehdr(struct afile *f)
 	le32_set(&hdr.riff.size, f->endpos - sizeof(hdr.riff));
 	memcpy(hdr.fmt_hdr.id, wav_id_fmt, 4);
 	le32_set(&hdr.fmt_hdr.size, sizeof(hdr.fmt));
-	le16_set(&hdr.fmt.fmt, 1);
+	le16_set(&hdr.fmt.fmt, WAV_FMT_EXT);
 	le16_set(&hdr.fmt.nch, f->nch);
 	le32_set(&hdr.fmt.rate, f->rate);
 	le32_set(&hdr.fmt.byterate, f->rate * f->par.bps * f->nch);
 	le16_set(&hdr.fmt.blkalign, f->par.bps * f->nch);
 	le16_set(&hdr.fmt.bits, f->par.bits);
+	le16_set(&hdr.fmt.extsize,
+	    WAV_FMT_EXT_SIZE - WAV_FMT_SIZE - sizeof(hdr.fmt.extsize));
+	le16_set(&hdr.fmt.valbits, f->par.bits);
+	le16_set(&hdr.fmt.extfmt, 1);
+	memcpy(&hdr.fmt.guid, wav_guid, sizeof(hdr.fmt.guid));
 	memcpy(hdr.data_hdr.id, wav_id_data, 4);
 	le32_set(&hdr.data_hdr.size, f->endpos - f->startpos);
 	return afile_writehdr(f, &hdr, sizeof(struct wav_hdr));
@@ -593,9 +598,9 @@ afile_aiff_readhdr(struct afile *f)
 		csize = (csize + 1) & ~1;
 		pos += sizeof(struct aiff_chunk) + csize;
 
-		if (lseek(f->fd, sizeof(form) + pos, SEEK_SET) < 0) {
+		if (lseek(f->fd, sizeof(form) + pos, SEEK_SET) == -1) {
 			log_puts(f->path);
-			log_puts(": filed to seek to chunk\n");
+			log_puts(": failed to seek to chunk\n");
 			return 0;
 		}
 	}
@@ -708,7 +713,7 @@ afile_au_readhdr(struct afile *f)
 	f->par.msb = 0;
 	f->rate = be32_get(&hdr.rate);
 	f->nch = be32_get(&hdr.nch);
-	if (lseek(f->fd, f->startpos, SEEK_SET) < 0) {
+	if (lseek(f->fd, f->startpos, SEEK_SET) == -1) {
 		log_puts(f->path);
 		log_puts(": ");
 		log_puts("failed to seek to data chunk\n");
@@ -778,7 +783,7 @@ afile_read(struct afile *f, void *data, size_t count)
 			count = maxread;
 	}
 	n = read(f->fd, data, count);
-	if (n < 0) {
+	if (n == -1) {
 		log_puts(f->path);
 		log_puts(": couldn't read\n");
 		return 0;
@@ -808,7 +813,7 @@ afile_write(struct afile *f, void *data, size_t count)
 			count = maxwrite;
 	}
 	n = write(f->fd, data, count);
-	if (n < 0) {
+	if (n == -1) {
 		log_puts(f->path);
 		log_puts(": couldn't write\n");
 		return 0;
@@ -833,7 +838,7 @@ afile_seek(struct afile *f, off_t pos)
 	 * seek only if needed to avoid errors with pipes & sockets
 	 */
 	if (pos != f->curpos) {
-		if (lseek(f->fd, pos, SEEK_SET) < 0) {
+		if (lseek(f->fd, pos, SEEK_SET) == -1) {
 			log_puts(f->path);
 			log_puts(": couldn't seek\n");
 			return 0;
@@ -895,8 +900,8 @@ afile_open(struct afile *f, char *path, int hdr, int flags,
 			f->fd = STDIN_FILENO;
 		} else {
 			f->path = path;
-			f->fd = open(f->path, O_RDONLY, 0);
-			if (f->fd < 0) {
+			f->fd = open(f->path, O_RDONLY);
+			if (f->fd == -1) {
 				log_puts(f->path);
 				log_puts(": failed to open for reading\n");
 				return 0;
@@ -925,7 +930,7 @@ afile_open(struct afile *f, char *path, int hdr, int flags,
 			f->path = path;
 			f->fd = open(f->path,
 			    O_WRONLY | O_TRUNC | O_CREAT, 0666);
-			if (f->fd < 0) {
+			if (f->fd == -1) {
 				log_puts(f->path);
 				log_puts(": failed to create file\n");
 				return 0;
